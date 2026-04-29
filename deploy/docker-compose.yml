@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: traffic-postgres
+    environment:
+      POSTGRES_USER: traffic
+      POSTGRES_PASSWORD: traffic
+      POSTGRES_DB: traffic_analysis
+    ports:
+      - "5432:5432"
+    volumes:
+      - traffic_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traffic -d traffic_analysis"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  traffic-go:
+    build: ..
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "9010:9010"
+    environment:
+      APP_ADDR: ":9010"
+      STORE_BACKEND: "postgres"
+      DATABASE_URL: "postgres://traffic:traffic@postgres:5432/traffic_analysis?sslmode=disable"
+      AUTO_MIGRATE: "true"
+      INTERNAL_API_KEY: "change-me-internal-key"
+      FLOWSHADOW_BASE_URL: ""
+      DEEPSOC_BASE_URL: ""
+
+volumes:
+  traffic_pg_data:

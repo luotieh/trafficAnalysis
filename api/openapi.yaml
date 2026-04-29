@@ -1,0 +1,88 @@
+openapi: 3.0.3
+info:
+  title: Traffic Analysis Unified API
+  version: 0.2.0-db
+  description: Go + PostgreSQL 持久化版本统一 API。
+servers:
+  - url: http://localhost:9010
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      summary: 服务健康检查
+      security: []
+      responses:
+        "200":
+          description: OK
+  /api/event/create:
+    post:
+      summary: 创建 DeepSOC 兼容安全事件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        "200":
+          description: 创建成功
+  /api/event/list:
+    get:
+      summary: 获取事件列表
+      responses:
+        "200":
+          description: 事件列表
+  /internal/event/push:
+    post:
+      summary: 接收 FlowShadow/ly_server 事件并映射为 SOC 事件
+      security:
+        - internalKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: 处理结果
+  /internal/sync:run:
+    post:
+      summary: 手动触发 FlowShadow 事件同步
+      security:
+        - internalKey: []
+      responses:
+        "200":
+          description: 同步结果
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    internalKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    EventCreate:
+      type: object
+      required: [message]
+      properties:
+        event_id: { type: string }
+        event_name: { type: string }
+        title: { type: string }
+        message: { type: string }
+        context: { type: string }
+        source: { type: string }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        category: { type: string }
+        observables:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              value: { type: string }
+              role: { type: string }
