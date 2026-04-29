@@ -1,17 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="${BASE:-http://localhost:9010}"
+BASE_URL="${BASE_URL:-http://localhost:9010}"
 
 echo "== health =="
-curl -s "$BASE/healthz"; echo
+curl -fsS "$BASE_URL/healthz" | tee /tmp/traffic-health.json
+echo
 
 echo "== login =="
-TOKEN=$(curl -s -X POST "$BASE/api/auth/login"   -H 'Content-Type: application/json'   -d '{"username":"admin","password":"admin"}' | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
-echo "token length: ${#TOKEN}"
+TOKEN=$(curl -fsS -X POST "$BASE_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin"}' | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+if [ -z "$TOKEN" ]; then
+  echo "login failed: token empty" >&2
+  exit 1
+fi
 
 echo "== create event =="
-curl -s -X POST "$BASE/api/event/create"   -H "Content-Type: application/json"   -H "Authorization: Bearer $TOKEN"   -d '{"event_name":"smoke-test","message":"数据库持久化冒烟测试","severity":"high","source":"manual"}'; echo
+EVENT_ID=$(curl -fsS -X POST "$BASE_URL/api/event/create" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"event_name":"MQ冒烟测试事件","message":"检测到异常流量","severity":"high","source":"smoke"}' \
+  | sed -n 's/.*"event_id":"\([^"]*\)".*/\1/p')
+echo "event_id=$EVENT_ID"
+
+# RabbitMQ worker 异步消费需要一点时间。
+sleep 2
 
 echo "== list events =="
-curl -s "$BASE/api/event/list"; echo
+curl -fsS "$BASE_URL/api/event/list"
+echo
+
+if [ -n "$EVENT_ID" ]; then
+  echo "== event messages =="
+  curl -fsS "$BASE_URL/api/event/$EVENT_ID/messages"
+  echo
+fi

@@ -96,3 +96,42 @@ curl http://localhost:9010/api/event/list
 3. `tasks / executions / summaries` 接入真实 Agent 编排。
 4. `/d/event /d/evidence /d/feature /d/topn` 从代理逐步迁移成 Go 原生查询。
 5. 为所有原 OpenAPI 增加自动化兼容测试。
+
+## RabbitMQ 消息队列版本
+
+本版本已把消息队列纳入 Docker 和 Go 代码：
+
+- Docker Compose 同时包含 PostgreSQL、RabbitMQ、Go 服务。
+- Go 服务通过 `MQ_BACKEND=rabbitmq` 开启消息投递。
+- 创建事件、接入 FlowShadow 事件、同步完成时会发布 MQ 消息。
+- 内置基础 worker 会消费队列并向事件消息表写入队列通知。
+
+启动全部服务：
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+RabbitMQ 管理台：
+
+```text
+http://localhost:15672
+traffic / traffic
+```
+
+只启动基础设施：
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d postgres rabbitmq
+```
+
+本地运行 Go：
+
+```bash
+cp .env.example .env
+export $(grep -v '^#' .env | xargs)
+go mod tidy
+go run ./cmd/traffic-api
+```
+
+更多说明见：`docs/mq-refactor.md`。

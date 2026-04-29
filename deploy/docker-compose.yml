@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16
+    # 如 Docker Hub 超时，可继续使用 ECR Public 的 Docker Official Images 镜像。
+    image: public.ecr.aws/docker/library/postgres:16
     container_name: traffic-postgres
     environment:
       POSTGRES_USER: traffic
@@ -14,12 +15,32 @@ services:
       test: ["CMD-SHELL", "pg_isready -U traffic -d traffic_analysis"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+
+  rabbitmq:
+    image: public.ecr.aws/docker/library/rabbitmq:3-management
+    container_name: traffic-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: traffic
+      RABBITMQ_DEFAULT_PASS: traffic
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - traffic_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   traffic-go:
     build: ..
+    container_name: traffic-go
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     ports:
       - "9010:9010"
@@ -28,9 +49,15 @@ services:
       STORE_BACKEND: "postgres"
       DATABASE_URL: "postgres://traffic:traffic@postgres:5432/traffic_analysis?sslmode=disable"
       AUTO_MIGRATE: "true"
+      MQ_BACKEND: "rabbitmq"
+      RABBITMQ_URL: "amqp://traffic:traffic@rabbitmq:5672/"
+      RABBITMQ_EXCHANGE: "traffic.events"
+      RABBITMQ_EVENT_QUEUE: "traffic.events.default"
+      RABBITMQ_CONSUMER_ENABLED: "true"
       INTERNAL_API_KEY: "change-me-internal-key"
       FLOWSHADOW_BASE_URL: ""
       DEEPSOC_BASE_URL: ""
 
 volumes:
   traffic_pg_data:
+  traffic_rabbitmq_data:

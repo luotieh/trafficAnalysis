@@ -9,6 +9,7 @@ import (
 
 	"traffic-go/internal/client"
 	"traffic-go/internal/domain"
+	"traffic-go/internal/mq"
 	"traffic-go/internal/store"
 )
 
@@ -17,6 +18,7 @@ type Services struct {
 	DeepSOC    client.DeepSOCClient
 	FlowShadow client.FlowShadowClient
 	LLM        client.LLMClient
+	Queue      mq.Queue
 }
 
 func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[string]any, error) {
@@ -41,6 +43,11 @@ func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[st
 		}
 		deepID := extractEventID(resp)
 		s.Store.BindEventMap(fp, lyID, deepID)
+		_ = s.publish(ctx, "event.ingested", deepID, "flowshadow", map[string]any{
+			"fingerprint": fp,
+			"ly_event_id": lyID,
+			"upstream":    resp,
+		})
 		return map[string]any{"success": true, "fingerprint": fp, "ly_event_id": lyID, "deepsoc_event_id": deepID, "upstream": resp}, nil
 	}
 
@@ -60,6 +67,11 @@ func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[st
 		MessageType:    "system_notification",
 		MessageContent: string(b),
 		RoundID:        1,
+	})
+	_ = s.publish(ctx, "event.ingested", event.EventID, "flowshadow", map[string]any{
+		"fingerprint": fp,
+		"ly_event_id": lyID,
+		"event":       event,
 	})
 	return map[string]any{"success": true, "fingerprint": fp, "ly_event_id": lyID, "deepsoc_event_id": event.EventID}, nil
 }
@@ -112,6 +124,7 @@ func (s Services) RunSyncOnce(ctx context.Context, batchSize, lookbackSeconds, m
 		s.Store.SavePushedEvent(pe)
 	}
 	s.Store.SaveCursor(domain.SyncCursor{Name: "flowshadow_events", LastTS: newestTS})
+	_ = s.publish(ctx, "sync.completed", "", "flowshadow", map[string]any{"since": since, "newest_ts": newestTS, "fetched": len(items), "pushed": pushed, "failed": failed})
 	return map[string]any{"since": since, "newest_ts": newestTS, "fetched": len(items), "pushed": pushed, "failed": failed}, nil
 }
 
@@ -155,7 +168,21 @@ func (s Services) CreateEventFromRequest(body map[string]any) (domain.Event, err
 		MessageContent: string(b),
 		RoundID:        1,
 	})
+	_ = s.publish(context.Background(), "event.created", created.EventID, firstNonEmpty(created.Source, "manual"), created)
 	return created, nil
+}
+
+func (s Services) publish(ctx context.Context, routingKey, eventID, source string, payload interface{}) error {
+	if s.Queue == nil || !s.Queue.Enabled() {
+		return nil
+	}
+	return s.Queue.Publish(ctx, routingKey, mq.EventMessage{
+		Type:      routingKey,
+		EventID:   eventID,
+		Source:    source,
+		Payload:   payload,
+		CreatedAt: time.Now().UTC(),
+	})
 }
 
 func extractEventID(resp map[string]any) string {

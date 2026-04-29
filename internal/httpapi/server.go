@@ -90,11 +90,11 @@ func (s *Server) routes() {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": "ok", "service": "traffic-go", "store_backend": s.cfg.StoreBackend})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": "ok", "service": "traffic-go", "store_backend": s.cfg.StoreBackend, "mq_backend": s.cfg.MQBackend})
 }
 
 func (s *Server) version(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"version": "0.2.0-db", "name": "traffic-go"})
+	writeJSON(w, http.StatusOK, map[string]any{"version": "0.3.0-db-mq", "name": "traffic-go"})
 }
 
 func (s *Server) internalEventPush(w http.ResponseWriter, r *http.Request) {

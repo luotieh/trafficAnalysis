@@ -9,8 +9,10 @@ import (
 	"traffic-go/internal/client"
 	"traffic-go/internal/config"
 	"traffic-go/internal/httpapi"
+	"traffic-go/internal/mq"
 	"traffic-go/internal/service"
 	"traffic-go/internal/store"
+	"traffic-go/internal/worker"
 )
 
 func main() {
@@ -30,6 +32,23 @@ func main() {
 	default:
 		log.Printf("STORE_BACKEND=%q, using memory store", cfg.StoreBackend)
 		st = store.NewMemoryStore()
+	}
+
+	var queue mq.Queue = mq.NoopQueue{}
+	if cfg.MQBackend == "rabbitmq" {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		rabbit, err := mq.NewRabbitMQ(ctx, mq.RabbitConfig{
+			URL:      cfg.RabbitMQURL,
+			Exchange: cfg.RabbitMQExchange,
+			Queue:    cfg.RabbitMQEventQueue,
+		})
+		if err != nil {
+			log.Fatalf("init rabbitmq failed: %v", err)
+		}
+		defer rabbit.Close()
+		queue = rabbit
+		worker.StartRabbitEventWorker(context.Background(), cfg, st)
 	}
 
 	svc := service.Services{
@@ -52,10 +71,11 @@ func main() {
 			Model:   cfg.LLMModel,
 			HTTP:    httpClient,
 		},
+		Queue: queue,
 	}
 
 	server := httpapi.New(cfg, svc)
-	log.Printf("traffic-go listening on %s, store=%s", cfg.Addr, cfg.StoreBackend)
+	log.Printf("traffic-go listening on %s, store=%s, mq=%s", cfg.Addr, cfg.StoreBackend, cfg.MQBackend)
 	if err := http.ListenAndServe(cfg.Addr, server.Handler()); err != nil {
 		log.Fatal(err)
 	}
