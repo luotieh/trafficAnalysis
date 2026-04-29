@@ -1,0 +1,23 @@
+{
+  "vhosts": [{"name": "/"}],
+  "users": [
+    {"name": "traffic", "password": "traffic", "tags": "administrator"}
+  ],
+  "permissions": [
+    {"user": "traffic", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*"}
+  ],
+  "exchanges": [
+    {"name": "traffic.events", "vhost": "/", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {}}
+  ],
+  "queues": [
+    {"name": "traffic.events.default", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {}}
+  ],
+  "bindings": [
+    {"source": "traffic.events", "vhost": "/", "destination": "traffic.events.default", "destination_type": "queue", "routing_key": "event.*", "arguments": {}},
+    {"source": "traffic.events", "vhost": "/", "destination": "traffic.events.default", "destination_type": "queue", "routing_key": "sync.*", "arguments": {}},
+    {"source": "traffic.events", "vhost": "/", "destination": "traffic.events.default", "destination_type": "queue", "routing_key": "evidence.*", "arguments": {}},
+    {"source": "traffic.events", "vhost": "/", "destination": "traffic.events.default", "destination_type": "queue", "routing_key": "task.*", "arguments": {}},
+    {"source": "traffic.events", "vhost": "/", "destination": "traffic.events.default", "destination_type": "queue", "routing_key": "llm.*", "arguments": {}},
+    {"source": "traffic.events", "vhost": "/", "destination": "traffic.events.default", "destination_type": "queue", "routing_key": "report.*", "arguments": {}}
+  ]
+}
