@@ -1,1 +1,4 @@
 .git
+reports/
+.docker-data/
+.docker-data/**

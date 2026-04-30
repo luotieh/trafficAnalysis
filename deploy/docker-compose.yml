@@ -17,7 +17,7 @@ services:
       retries: 20
 
   rabbitmq:
-    image: public.ecr.aws/docker/library/rabbitmq:3-management
+    image: public.ecr.aws/docker/library/rabbitmq:3.13-management
     container_name: traffic-rabbitmq
     hostname: traffic-rabbitmq
     environment:
@@ -28,6 +28,8 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes:
+      - ../.docker-data/rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
       interval: 5s

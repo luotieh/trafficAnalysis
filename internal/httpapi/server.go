@@ -10,6 +10,7 @@ import (
 
 	"traffic-go/internal/config"
 	"traffic-go/internal/domain"
+	"traffic-go/internal/lyserver"
 	"traffic-go/internal/service"
 )
 
@@ -18,10 +19,11 @@ type Server struct {
 	services service.Services
 	mux      *http.ServeMux
 	tokens   map[string]string
+	ly       *lyserver.Service
 }
 
 func New(cfg config.Config, services service.Services) *Server {
-	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}}
+	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(cfg.DatabaseURL)}
 	s.routes()
 	return s
 }
@@ -86,6 +88,16 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/engineer-chat/status", s.engineerStatus)
 
 	s.mux.HandleFunc("POST /api/report/global", s.reportGlobal)
+
+	s.mux.HandleFunc("POST /d/auth", s.ly.Auth)
+	s.mux.HandleFunc("GET /d/sctl", s.ly.Status)
+	s.mux.HandleFunc("GET /d/config", s.ly.GetConfig)
+	s.mux.HandleFunc("POST /d/config", s.ly.SetConfig)
+	s.mux.HandleFunc("GET /d/mo", s.ly.GetMO)
+	s.mux.HandleFunc("POST /d/mo", s.ly.SetMO)
+	s.mux.HandleFunc("GET /d/bwlist", s.ly.GetBWList)
+	s.mux.HandleFunc("POST /d/bwlist", s.ly.SetBWList)
+
 	s.mux.HandleFunc("/d/", s.flowShadowProxy)
 }
 
