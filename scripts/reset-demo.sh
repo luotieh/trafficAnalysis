@@ -26,18 +26,17 @@ wait_cmd() {
 echo "[reset-demo] destroying containers and volumes..."
 docker compose -f "$COMPOSE_FILE" down -v --remove-orphans
 
-echo "[reset-demo] starting postgres, mysql and rabbitmq..."
-docker compose -f "$COMPOSE_FILE" up -d postgres mysql rabbitmq
+echo "[reset-demo] starting postgres and rabbitmq..."
+docker compose -f "$COMPOSE_FILE" up -d postgres rabbitmq
 
 wait_cmd postgres "postgres" "docker compose -f '$COMPOSE_FILE' exec -T postgres pg_isready -U traffic -d traffic_analysis" 120
-wait_cmd mysql "mysql" "docker compose -f '$COMPOSE_FILE' exec -T mysql mysqladmin ping -h 127.0.0.1 -utraffic -ptraffic --silent" 180
 wait_cmd rabbitmq "rabbitmq" "docker compose -f '$COMPOSE_FILE' exec -T rabbitmq rabbitmq-diagnostics -q ping" 180
 
 echo "[reset-demo] building traffic-go..."
 docker compose -f "$COMPOSE_FILE" build traffic-go
 
-echo "[reset-demo] initializing PostgreSQL, RabbitMQ and ly_server MySQL data..."
-docker compose -f "$COMPOSE_FILE" run --rm --entrypoint /traffic-admin traffic-go -init-with-demo -init-lyserver-db
+echo "[reset-demo] initializing PostgreSQL, RabbitMQ and ly_server PostgreSQL-compatible schema..."
+docker compose -f "$COMPOSE_FILE" run --rm --entrypoint /traffic-admin traffic-go -init-with-demo -init-lyserver-compat
 
 echo "[reset-demo] starting api service..."
 docker compose -f "$COMPOSE_FILE" up -d traffic-go

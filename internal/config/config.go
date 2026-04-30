@@ -31,8 +31,6 @@ type Config struct {
 	RabbitMQExchange        string
 	RabbitMQEventQueue      string
 	RabbitMQConsumerEnabled bool
-	LYDBBackend             string
-	LYDatabaseDSN           string
 }
 
 func Load() Config {
@@ -60,8 +58,6 @@ func Load() Config {
 		RabbitMQExchange:        get("RABBITMQ_EXCHANGE", "traffic.events"),
 		RabbitMQEventQueue:      get("RABBITMQ_EVENT_QUEUE", "traffic.events.default"),
 		RabbitMQConsumerEnabled: getBool("RABBITMQ_CONSUMER_ENABLED", true),
-		LYDBBackend:             strings.ToLower(get("LY_DB_BACKEND", "mysql")),
-		LYDatabaseDSN:           get("LY_DATABASE_DSN", "traffic:traffic@tcp(127.0.0.1:3306)/server?charset=utf8mb4&parseTime=true&loc=Local&multiStatements=true"),
 	}
 }
 
