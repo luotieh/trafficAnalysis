@@ -1,6 +1,5 @@
 services:
   postgres:
-    # 如 Docker Hub 超时，可继续使用 ECR Public 的 Docker Official Images 镜像。
     image: public.ecr.aws/docker/library/postgres:16
     container_name: traffic-postgres
     environment:
@@ -17,6 +16,25 @@ services:
       timeout: 3s
       retries: 20
 
+  mysql:
+    image: public.ecr.aws/docker/library/mysql:8.4
+    container_name: traffic-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: traffic
+      MYSQL_DATABASE: server
+      MYSQL_USER: traffic
+      MYSQL_PASSWORD: traffic
+    ports:
+      - "3306:3306"
+    volumes:
+      - traffic_mysql_data:/var/lib/mysql
+      - ./mysql/ly_server_init.sql:/docker-entrypoint-initdb.d/01-ly-server.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -utraffic -ptraffic --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   rabbitmq:
     image: public.ecr.aws/docker/library/rabbitmq:3-management
     container_name: traffic-rabbitmq
@@ -30,7 +48,7 @@ services:
       - "5672:5672"
       - "15672:15672"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -41,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mysql:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     ports:
@@ -50,6 +70,8 @@ services:
       STORE_BACKEND: "postgres"
       DATABASE_URL: "postgres://traffic:traffic@postgres:5432/traffic_analysis?sslmode=disable"
       AUTO_MIGRATE: "true"
+      LY_DB_BACKEND: "mysql"
+      LY_DATABASE_DSN: "traffic:traffic@tcp(mysql:3306)/server?charset=utf8mb4&parseTime=true&loc=Local&multiStatements=true"
       MQ_BACKEND: "rabbitmq"
       RABBITMQ_URL: "amqp://traffic:traffic@rabbitmq:5672/"
       RABBITMQ_EXCHANGE: "traffic.events"
@@ -61,3 +83,4 @@ services:
 
 volumes:
   traffic_pg_data:
+  traffic_mysql_data:

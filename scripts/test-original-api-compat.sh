@@ -37,6 +37,11 @@ ADMIN_PASSWORD_FALLBACK="${ADMIN_PASSWORD_FALLBACK:-admin}"
 REPORT_DIR="${REPORT_DIR:-reports}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-20}"
 CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
+MYSQL_READY_CHECK="${MYSQL_READY_CHECK:-true}"
+MYSQL_SERVICE="${MYSQL_SERVICE:-mysql}"
+MYSQL_USER="${MYSQL_USER:-traffic}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-traffic}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-server}"
 
 mkdir -p "$REPORT_DIR"
 
@@ -151,6 +156,43 @@ append_report_row() {
   note="${note//$'\n'/ }"
   note="${note//|/\\|}"
   echo "| $result | $group | \`$name\` | $status | $note |" >> "$REPORT_FILE"
+}
+
+
+record_infra_result() {
+  local result="$1"
+  local group="$2"
+  local name="$3"
+  local status="$4"
+  local note="$5"
+
+  TOTAL=$((TOTAL + 1))
+  case "$result" in
+    PASS) PASS=$((PASS + 1)) ;;
+    WARN) WARN=$((WARN + 1)) ;;
+    FAIL) FAIL=$((FAIL + 1)) ;;
+  esac
+  print_result "$result" "$group" "$name" "$status" "$note"
+  append_report_row "$result" "$group" "$name" "$status" "$note"
+}
+
+check_mysql_ready() {
+  if [[ "$MYSQL_READY_CHECK" != "true" ]]; then
+    record_infra_result "WARN" "infra/mysql" "mysql ready check" "-" "MYSQL_READY_CHECK=false，跳过 ly_server MySQL 检测"
+    return
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    record_infra_result "WARN" "infra/mysql" "mysql ready check" "-" "未找到 docker 命令，跳过 ly_server MySQL 检测"
+    return
+  fi
+
+  if docker compose -f deploy/docker-compose.yml exec -T "$MYSQL_SERVICE" \
+      mysqladmin ping -h 127.0.0.1 -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent >/dev/null 2>&1; then
+    record_infra_result "PASS" "infra/mysql" "mysqladmin ping $MYSQL_SERVICE/$MYSQL_DATABASE" "ready" "ly_server MySQL ready"
+  else
+    record_infra_result "WARN" "infra/mysql" "mysqladmin ping $MYSQL_SERVICE/$MYSQL_DATABASE" "not-ready" "ly_server MySQL 未就绪，/d/* 原生替代可能无法验证"
+  fi
 }
 
 print_result() {
@@ -347,6 +389,7 @@ echo "BASE_URL=$BASE_URL"
 request "base" "GET /healthz" "GET" "/healthz" "must_2xx"
 request "base" "GET /health" "GET" "/health" "must_2xx"
 request "base" "GET /api/version" "GET" "/api/version" "must_2xx"
+check_mysql_ready
 
 login
 
