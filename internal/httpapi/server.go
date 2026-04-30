@@ -98,6 +98,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /d/bwlist", s.ly.GetBWList)
 	s.mux.HandleFunc("POST /d/bwlist", s.ly.SetBWList)
 
+	s.mux.HandleFunc("GET /d/event", s.ly.Event)
+	s.mux.HandleFunc("GET /d/feature", s.ly.Feature)
+	s.mux.HandleFunc("GET /d/topn", s.ly.TopN)
+	s.mux.HandleFunc("GET /d/evidence", s.ly.Evidence)
+
 	s.mux.HandleFunc("/d/", s.flowShadowProxy)
 }
 
