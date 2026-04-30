@@ -20,14 +20,15 @@ services:
   rabbitmq:
     image: public.ecr.aws/docker/library/rabbitmq:3-management
     container_name: traffic-rabbitmq
+    hostname: traffic-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: traffic
       RABBITMQ_DEFAULT_PASS: traffic
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_ERLANG_COOKIE: traffic-rabbitmq-cookie
     ports:
       - "5672:5672"
       - "15672:15672"
-    volumes:
-      - traffic_rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
@@ -60,4 +61,3 @@ services:
 
 volumes:
   traffic_pg_data:
-  traffic_rabbitmq_data:
