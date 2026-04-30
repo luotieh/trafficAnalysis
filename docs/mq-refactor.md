@@ -90,3 +90,48 @@ docker compose -f deploy/docker-compose.yml up -d --build
 3. 消费者独立进程化，避免 API 服务和 Worker 资源互相影响。
 4. 消费幂等表，防止重复消息导致重复处理。
 5. 队列监控、告警、重试次数和延迟队列。
+
+
+## 复刻 DeepSOC 初始化脚本
+
+原 DeepSOC 使用：
+
+```bash
+python main.py -init-with-demo
+```
+
+当前 Go 版本对应命令：
+
+```bash
+./traffic-admin -init-with-demo
+```
+
+在 Docker Compose 环境中使用：
+
+```bash
+./scripts/init-demo.sh
+```
+
+如需完全清空数据卷并重新初始化：
+
+```bash
+./scripts/reset-demo.sh
+```
+
+该初始化流程会执行：
+
+1. 重建 PostgreSQL schema。
+2. 写入默认提示词。
+3. 创建管理员用户：`admin / admin123`。
+4. 写入演示安全事件、消息、任务、执行记录、总结。
+5. 初始化 RabbitMQ exchange、queue、binding。
+6. 发布一条 `event.created` 演示消息用于验证 worker 消费链路。
+
+单独命令：
+
+```bash
+/traffic-admin -init            # 初始化数据库和 MQ，不加载 demo
+/traffic-admin -load-demo       # 仅加载 demo
+/traffic-admin -init-mq         # 仅初始化 RabbitMQ 拓扑
+/traffic-admin -publish-demo-mq # 仅发布演示消息
+```
