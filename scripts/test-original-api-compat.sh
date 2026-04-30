@@ -37,6 +37,10 @@ ADMIN_PASSWORD_FALLBACK="${ADMIN_PASSWORD_FALLBACK:-admin}"
 REPORT_DIR="${REPORT_DIR:-reports}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-20}"
 CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
+LY_COMPAT_READY_CHECK="${LY_COMPAT_READY_CHECK:-true}"
+POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
+POSTGRES_USER="${POSTGRES_USER:-traffic}"
+POSTGRES_DB="${POSTGRES_DB:-traffic_analysis}"
 
 mkdir -p "$REPORT_DIR"
 
@@ -151,6 +155,43 @@ append_report_row() {
   note="${note//$'\n'/ }"
   note="${note//|/\\|}"
   echo "| $result | $group | \`$name\` | $status | $note |" >> "$REPORT_FILE"
+}
+
+
+record_infra_result() {
+  local result="$1"
+  local group="$2"
+  local name="$3"
+  local status="$4"
+  local note="$5"
+
+  TOTAL=$((TOTAL + 1))
+  case "$result" in
+    PASS) PASS=$((PASS + 1)) ;;
+    WARN) WARN=$((WARN + 1)) ;;
+    FAIL) FAIL=$((FAIL + 1)) ;;
+  esac
+  print_result "$result" "$group" "$name" "$status" "$note"
+  append_report_row "$result" "$group" "$name" "$status" "$note"
+}
+
+check_ly_compat_ready() {
+  if [[ "${LY_COMPAT_READY_CHECK:-true}" != "true" ]]; then
+    record_infra_result "WARN" "infra/lyserver-postgres" "ly_server compat schema ready check" "-" "LY_COMPAT_READY_CHECK=false，跳过 ly_server PostgreSQL 兼容表检测"
+    return
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    record_infra_result "WARN" "infra/lyserver-postgres" "ly_server compat schema ready check" "-" "未找到 docker 命令，跳过 ly_server PostgreSQL 兼容表检测"
+    return
+  fi
+
+  if docker compose -f deploy/docker-compose.yml exec -T "$POSTGRES_SERVICE" \
+      psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT to_regclass('public.t_mo') IS NOT NULL AND to_regclass('public.t_event_data') IS NOT NULL;" 2>/dev/null | grep -q 't'; then
+    record_infra_result "PASS" "infra/lyserver-postgres" "PostgreSQL t_mo/t_event_data" "ready" "ly_server PostgreSQL 兼容表 ready"
+  else
+    record_infra_result "WARN" "infra/lyserver-postgres" "PostgreSQL t_mo/t_event_data" "not-ready" "ly_server PostgreSQL 兼容表未就绪，/d/* 原生替代可能无法验证"
+  fi
 }
 
 print_result() {
@@ -347,6 +388,7 @@ echo "BASE_URL=$BASE_URL"
 request "base" "GET /healthz" "GET" "/healthz" "must_2xx"
 request "base" "GET /health" "GET" "/health" "must_2xx"
 request "base" "GET /api/version" "GET" "/api/version" "must_2xx"
+check_ly_compat_ready
 
 login
 
