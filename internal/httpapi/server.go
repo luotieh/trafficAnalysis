@@ -64,6 +64,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/event/{event_id}", s.getEvent)
 	s.mux.HandleFunc("GET /api/event/{event_id}/messages", s.getMessages)
 	s.mux.HandleFunc("GET /api/event/{event_id}/tasks", s.getTasks)
+	s.mux.HandleFunc("GET /api/event/{event_id}/actions", s.getActions)
+	s.mux.HandleFunc("GET /api/event/{event_id}/commands", s.getCommands)
 	s.mux.HandleFunc("GET /api/event/{event_id}/stats", s.getStats)
 	s.mux.HandleFunc("GET /api/event/{event_id}/summaries", s.getSummaries)
 	s.mux.HandleFunc("POST /api/event/send_message/{event_id}", s.withNewMessageBroadcast(s.sendEventMessage))
@@ -381,12 +383,22 @@ func (s *Server) getTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: s.services.Store.ListTasks(r.PathValue("event_id"))})
 }
 
+func (s *Server) getActions(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: s.services.Store.ListActions(r.PathValue("event_id"))})
+}
+
+func (s *Server) getCommands(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: s.services.Store.ListCommands(r.PathValue("event_id"))})
+}
+
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	eventID := r.PathValue("event_id")
 	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]any{
 		"event_id":     eventID,
 		"messages":     len(s.services.Store.ListMessages(eventID)),
 		"tasks":        len(s.services.Store.ListTasks(eventID)),
+		"actions":      len(s.services.Store.ListActions(eventID)),
+		"commands":     len(s.services.Store.ListCommands(eventID)),
 		"executions":   len(s.services.Store.ListExecutions(eventID)),
 		"summaries":    len(s.services.Store.ListSummaries(eventID)),
 		"generated_at": time.Now().UTC(),
@@ -404,12 +416,16 @@ func (s *Server) sendEventMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := domain.Message{
-		EventID:        eventID,
-		MessageFrom:    firstNonEmpty(asString(body["message_from"]), "engineer"),
-		MessageType:    firstNonEmpty(asString(body["message_type"]), "text"),
-		MessageContent: firstNonEmpty(asString(body["message"]), asString(body["message_content"])),
-		RoundID:        1,
+		EventID:         eventID,
+		UserID:          asString(body["user_id"]),
+		UserNickname:    asString(body["user_nickname"]),
+		MessageFrom:     service.NormalizeMessageFrom(firstNonEmpty(asString(body["message_from"]), asString(body["sender"]), "user")),
+		MessageType:     firstNonEmpty(asString(body["message_type"]), "user_message"),
+		MessageContent:  firstNonEmpty(asString(body["message"]), asString(body["message_content"])),
+		RoundID:         1,
+		MessageCategory: "agent",
 	}
+	msg.SenderType = service.SenderType(msg.MessageFrom)
 	created, err := s.services.Store.AddMessage(msg)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
@@ -432,6 +448,8 @@ func (s *Server) getHierarchy(w http.ResponseWriter, r *http.Request) {
 		"event_id":   eventID,
 		"messages":   s.services.Store.ListMessages(eventID),
 		"tasks":      s.services.Store.ListTasks(eventID),
+		"actions":    s.services.Store.ListActions(eventID),
+		"commands":   s.services.Store.ListCommands(eventID),
 		"executions": s.services.Store.ListExecutions(eventID),
 		"summaries":  s.services.Store.ListSummaries(eventID),
 	}})
@@ -491,10 +509,11 @@ func (s *Server) updateUserPassword(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) promptList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]string{
-		"captain":  "负责统筹安全事件处置",
-		"manager":  "负责拆解任务与分派",
-		"expert":   "负责分析证据与给出判断",
-		"operator": "负责执行处置动作",
+		domain.RoleCaptain:  "负责统筹安全事件处置",
+		domain.RoleManager:  "负责拆解任务与分派",
+		domain.RoleOperator: "负责生成可执行命令",
+		domain.RoleExecutor: "负责连接外部工具并执行命令",
+		domain.RoleExpert:   "负责分析证据与给出判断",
 	}})
 }
 
@@ -526,13 +545,13 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "事件不存在")
 		return
 	}
-	_, _ = s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: "engineer", MessageType: "text", MessageContent: message, RoundID: 1})
+	_, _ = s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleUser, MessageType: "user_message", MessageContent: message, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "user"})
 	reply, err := s.services.LLM.Chat(r.Context(), message)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	m, _ := s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: "ai", MessageType: "assistant_response", MessageContent: reply, RoundID: 1})
+	m, _ := s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleAssistant, MessageType: "assistant_response", MessageContent: reply, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "ai"})
 	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]any{"reply": reply, "message": m}})
 }
 

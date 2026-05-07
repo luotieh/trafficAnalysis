@@ -72,7 +72,7 @@ func NewRabbitMQ(ctx context.Context, cfg RabbitConfig) (*RabbitMQ, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	for _, key := range []string{"event.*", "sync.*", "evidence.*"} {
+	for _, key := range []string{"event.*", "sync.*", "evidence.*", "notifications.frontend.#"} {
 		if err := ch.QueueBind(cfg.Queue, key, cfg.Exchange, false, nil); err != nil {
 			_ = ch.Close()
 			_ = conn.Close()

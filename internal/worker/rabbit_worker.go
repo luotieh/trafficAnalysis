@@ -12,6 +12,8 @@ import (
 	"traffic-go/internal/config"
 	"traffic-go/internal/domain"
 	"traffic-go/internal/mq"
+	"traffic-go/internal/realtime"
+	"traffic-go/internal/service"
 	"traffic-go/internal/store"
 )
 
@@ -55,7 +57,7 @@ func runRabbitEventWorker(ctx context.Context, cfg config.Config, st store.Store
 	if err != nil {
 		return err
 	}
-	for _, key := range []string{"event.*", "sync.*", "evidence.*"} {
+	for _, key := range []string{"event.*", "sync.*", "evidence.*", "notifications.frontend.#"} {
 		if err := ch.QueueBind(q.Name, key, exchange, false, nil); err != nil {
 			return err
 		}
@@ -96,20 +98,35 @@ func handleEventMessage(st store.Store, routingKey string, body []byte) error {
 	if msg.EventID == "" {
 		return nil
 	}
+	if strings.HasPrefix(routingKey, "notifications.frontend.") {
+		realtime.BroadcastMessage(msg.EventID, msg.Payload)
+		return nil
+	}
+	svc := service.Services{Store: st}
+	if strings.HasPrefix(routingKey, "event.") {
+		if err := svc.RunAgentWorkflow(context.Background(), msg.EventID); err == nil {
+			return nil
+		}
+	}
+	from := service.NormalizeMessageFrom(msg.Source)
 	content := map[string]any{
-		"response_text": "异步队列已接收事件，后续可在此扩展证据拉取、AI分析、任务编排。",
+		"response_text": "异步队列已接收通知。",
 		"routing_key":   routingKey,
 		"source":        msg.Source,
 		"created_at":    msg.CreatedAt,
 	}
-	b, _ := json.Marshal(content)
-	_, err := st.AddMessage(domain.Message{
-		EventID:        msg.EventID,
-		MessageFrom:    "queue-worker",
-		MessageType:    "queue_notification",
-		MessageContent: string(b),
-		RoundID:        1,
+	m, err := st.AddMessage(domain.Message{
+		EventID:         msg.EventID,
+		MessageFrom:     from,
+		MessageType:     "queue_notification",
+		MessageContent:  service.StandardContent(content),
+		RoundID:         1,
+		MessageCategory: "agent",
+		SenderType:      service.SenderType(from),
 	})
+	if err == nil {
+		realtime.BroadcastMessage(msg.EventID, m)
+	}
 	return err
 }
 

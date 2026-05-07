@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS messages (
     user_nickname VARCHAR(128) NOT NULL DEFAULT '',
     message_from VARCHAR(64) NOT NULL DEFAULT '',
     message_type VARCHAR(64) NOT NULL DEFAULT '',
+    message_category VARCHAR(32) NOT NULL DEFAULT 'agent',
+    sender_type VARCHAR(32) NOT NULL DEFAULT 'agent',
+    chat_session_id VARCHAR(128) NOT NULL DEFAULT '',
     message_content TEXT NOT NULL DEFAULT '',
     round_id INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -51,11 +54,46 @@ CREATE TABLE IF NOT EXISTS tasks (
     task_id VARCHAR(128) UNIQUE NOT NULL,
     event_id VARCHAR(128) NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
     task_name VARCHAR(256) NOT NULL DEFAULT '',
+    task_type VARCHAR(64) NOT NULL DEFAULT '',
     task_description TEXT NOT NULL DEFAULT '',
     task_status VARCHAR(32) NOT NULL DEFAULT 'pending',
     task_priority VARCHAR(32) NOT NULL DEFAULT '',
     assigned_to VARCHAR(128) NOT NULL DEFAULT '',
+    task_assignee VARCHAR(128) NOT NULL DEFAULT '',
     round_id INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS actions (
+    id BIGSERIAL PRIMARY KEY,
+    action_id VARCHAR(128) UNIQUE NOT NULL,
+    task_id VARCHAR(128) NOT NULL DEFAULT '',
+    event_id VARCHAR(128) NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    round_id INTEGER NOT NULL DEFAULT 1,
+    action_name VARCHAR(256) NOT NULL DEFAULT '',
+    action_type VARCHAR(64) NOT NULL DEFAULT '',
+    action_assignee VARCHAR(128) NOT NULL DEFAULT '',
+    action_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    action_result TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS commands (
+    id BIGSERIAL PRIMARY KEY,
+    command_id VARCHAR(128) UNIQUE NOT NULL,
+    action_id VARCHAR(128) NOT NULL DEFAULT '',
+    task_id VARCHAR(128) NOT NULL DEFAULT '',
+    event_id VARCHAR(128) NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    round_id INTEGER NOT NULL DEFAULT 1,
+    command_name VARCHAR(256) NOT NULL DEFAULT '',
+    command_type VARCHAR(64) NOT NULL DEFAULT '',
+    command_assignee VARCHAR(128) NOT NULL DEFAULT '',
+    command_entity TEXT NOT NULL DEFAULT '',
+    command_params TEXT NOT NULL DEFAULT '',
+    command_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    command_result TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -64,9 +102,14 @@ CREATE TABLE IF NOT EXISTS executions (
     id BIGSERIAL PRIMARY KEY,
     execution_id VARCHAR(128) UNIQUE NOT NULL,
     event_id VARCHAR(128) NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    task_id VARCHAR(128) NOT NULL DEFAULT '',
+    action_id VARCHAR(128) NOT NULL DEFAULT '',
+    round_id INTEGER NOT NULL DEFAULT 1,
     command_id VARCHAR(128) NOT NULL DEFAULT '',
     execution_status VARCHAR(32) NOT NULL DEFAULT 'pending',
     execution_result TEXT NOT NULL DEFAULT '',
+    execution_summary TEXT NOT NULL DEFAULT '',
+    ai_summary TEXT NOT NULL DEFAULT '',
     command_name VARCHAR(256) NOT NULL DEFAULT '',
     command_type VARCHAR(64) NOT NULL DEFAULT '',
     command_entity VARCHAR(256) NOT NULL DEFAULT '',
@@ -132,8 +175,21 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_event_id ON messages(event_id, id);
 CREATE INDEX IF NOT EXISTS idx_tasks_event_id ON tasks(event_id);
+CREATE INDEX IF NOT EXISTS idx_actions_event_id ON actions(event_id);
+CREATE INDEX IF NOT EXISTS idx_commands_event_id ON commands(event_id);
 CREATE INDEX IF NOT EXISTS idx_executions_event_id ON executions(event_id);
 CREATE INDEX IF NOT EXISTS idx_summaries_event_id ON summaries(event_id);
 CREATE INDEX IF NOT EXISTS idx_pushed_events_idempotency_key ON pushed_events(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_category VARCHAR(32) NOT NULL DEFAULT 'agent';
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_type VARCHAR(32) NOT NULL DEFAULT 'agent';
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS chat_session_id VARCHAR(128) NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_type VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_assignee VARCHAR(128) NOT NULL DEFAULT '';
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS task_id VARCHAR(128) NOT NULL DEFAULT '';
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS action_id VARCHAR(128) NOT NULL DEFAULT '';
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS round_id INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS execution_summary TEXT NOT NULL DEFAULT '';
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS ai_summary TEXT NOT NULL DEFAULT '';
 `

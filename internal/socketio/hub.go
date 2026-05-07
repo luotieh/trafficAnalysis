@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 	"traffic-go/internal/realtime"
+	"traffic-go/internal/service"
 
 	"github.com/gorilla/websocket"
 )
@@ -226,12 +227,13 @@ func (h *Hub) handleSocketEvent(s *Session, payload string) {
 			h.emitToSession(s, "error", map[string]any{"message": "缺少必要参数"})
 			return
 		}
-		sender := firstNonEmpty(asString(data["sender"]), asString(data["message_from"]), "user")
+		sender := service.NormalizeMessageFrom(firstNonEmpty(asString(data["sender"]), asString(data["message_from"]), "user"))
 		msg := map[string]any{
 			"message_id":      "ws-" + randomID(),
 			"event_id":        eventID,
 			"message_from":    sender,
 			"message_type":    "user_message",
+			"sender_type":     service.SenderType(sender),
 			"message_content": content,
 			"created_at":      time.Now().Format(time.RFC3339Nano),
 		}

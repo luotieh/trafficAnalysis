@@ -18,8 +18,18 @@ type Store interface {
 	AddMessage(m domain.Message) (domain.Message, error)
 	ListMessages(eventID string) []domain.Message
 
+	AddTask(t domain.Task) (domain.Task, error)
+	UpdateTask(taskID string, patch map[string]any) (domain.Task, bool)
 	ListTasks(eventID string) []domain.Task
+	AddAction(a domain.Action) (domain.Action, error)
+	UpdateAction(actionID string, patch map[string]any) (domain.Action, bool)
+	ListActions(eventID string) []domain.Action
+	AddCommand(c domain.Command) (domain.Command, error)
+	UpdateCommand(commandID string, patch map[string]any) (domain.Command, bool)
+	ListCommands(eventID string) []domain.Command
+	AddExecution(e domain.Execution) (domain.Execution, error)
 	ListExecutions(eventID string) []domain.Execution
+	AddSummary(sm domain.Summary) (domain.Summary, error)
 	ListSummaries(eventID string) []domain.Summary
 
 	ReserveFingerprint(fp string) bool
