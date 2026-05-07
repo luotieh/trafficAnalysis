@@ -12,18 +12,20 @@ import (
 	"traffic-go/internal/domain"
 	"traffic-go/internal/lyserver"
 	"traffic-go/internal/service"
+	"traffic-go/internal/socketio"
 )
 
 type Server struct {
-	cfg      config.Config
-	services service.Services
-	mux      *http.ServeMux
-	tokens   map[string]string
-	ly       *lyserver.Service
+	cfg       config.Config
+	services  service.Services
+	mux       *http.ServeMux
+	tokens    map[string]string
+	ly        *lyserver.Service
+	socketHub *socketio.Hub
 }
 
 func New(cfg config.Config, services service.Services) *Server {
-	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(cfg.DatabaseURL)}
+	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(cfg.DatabaseURL), socketHub: socketio.NewHub()}
 	s.routes()
 	return s
 }
@@ -33,6 +35,9 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) routes() {
+
+	s.mux.HandleFunc("/socket.io/", s.socketHub.ServeHTTP)
+	s.mux.HandleFunc("/socket.io", s.socketHub.ServeHTTP)
 	s.mux.HandleFunc("GET /healthz", s.health)
 	s.mux.HandleFunc("GET /health", s.health)
 	s.mux.HandleFunc("GET /api/version", s.version)
