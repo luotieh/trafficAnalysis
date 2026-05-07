@@ -6,9 +6,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"traffic-go/internal/autopilot"
 )
+
+const drivingModeStateKey = "driving_mode"
 
 type drivingModeResponseRecorder struct {
 	http.ResponseWriter
@@ -39,7 +42,7 @@ func (w *drivingModeResponseRecorder) flush() {
 }
 
 func (s *Server) drivingModeGetCompat(w http.ResponseWriter, r *http.Request) {
-	enabled, err := autopilot.GetDrivingMode(r.Context(), s.cfg.DatabaseURL)
+	enabled, err := s.getDrivingMode(r)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -61,7 +64,7 @@ func (s *Server) drivingModePut(w http.ResponseWriter, r *http.Request) {
 	if len(bytes.TrimSpace(body)) > 0 {
 		_ = json.Unmarshal(body, &req)
 	}
-	if err := autopilot.SetDrivingMode(r.Context(), s.cfg.DatabaseURL, req.Enabled); err != nil {
+	if err := s.setDrivingMode(r, req.Enabled); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -84,7 +87,7 @@ func (s *Server) withDrivingModeAutomation(next http.HandlerFunc) http.HandlerFu
 				eventID, _ = drivingEventFromRequest(r)
 			}
 			if eventID != "" {
-				enabled, err := autopilot.GetDrivingMode(r.Context(), s.cfg.DatabaseURL)
+				enabled, err := s.getDrivingMode(r)
 				if err != nil {
 					log.Printf("driving-mode: read state failed event_id=%s err=%v", eventID, err)
 				} else if enabled {
@@ -98,6 +101,43 @@ func (s *Server) withDrivingModeAutomation(next http.HandlerFunc) http.HandlerFu
 
 		rec.flush()
 	}
+}
+
+func (s *Server) getDrivingMode(r *http.Request) (bool, error) {
+	if strings.TrimSpace(s.cfg.DatabaseURL) != "" {
+		enabled, err := autopilot.GetDrivingMode(r.Context(), s.cfg.DatabaseURL)
+		if err == nil {
+			s.setMemoryState(drivingModeStateKey, enabled)
+			return enabled, nil
+		}
+		if s.cfg.StoreBackend == "postgres" {
+			return false, err
+		}
+	}
+	return s.getMemoryState(drivingModeStateKey), nil
+}
+
+func (s *Server) setDrivingMode(r *http.Request, enabled bool) error {
+	s.setMemoryState(drivingModeStateKey, enabled)
+	if strings.TrimSpace(s.cfg.DatabaseURL) == "" {
+		return nil
+	}
+	if err := autopilot.SetDrivingMode(r.Context(), s.cfg.DatabaseURL, enabled); err != nil && s.cfg.StoreBackend == "postgres" {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) getMemoryState(key string) bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.states[key]
+}
+
+func (s *Server) setMemoryState(key string, value bool) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.states[key] = value
 }
 
 func drivingEventFromResponse(raw []byte) (string, string) {

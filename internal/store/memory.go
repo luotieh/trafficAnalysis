@@ -264,6 +264,7 @@ func (s *MemoryStore) AddMessage(m domain.Message) (domain.Message, error) {
 	if m.RoundID == 0 {
 		m.RoundID = 1
 	}
+	m = domain.NormalizeMessage(m)
 	s.messagesByEvent[m.EventID] = append(s.messagesByEvent[m.EventID], m)
 	return m, nil
 }
@@ -273,6 +274,9 @@ func (s *MemoryStore) ListMessages(eventID string) []domain.Message {
 	defer s.mu.RUnlock()
 	out := append([]domain.Message(nil), s.messagesByEvent[eventID]...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	for i := range out {
+		out[i] = domain.NormalizeMessage(out[i])
+	}
 	return out
 }
 

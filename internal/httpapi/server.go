@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"traffic-go/internal/config"
@@ -22,10 +23,12 @@ type Server struct {
 	tokens    map[string]string
 	ly        *lyserver.Service
 	socketHub *socketio.Hub
+	stateMu   sync.RWMutex
+	states    map[string]bool
 }
 
 func New(cfg config.Config, services service.Services) *Server {
-	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(cfg.DatabaseURL), socketHub: socketio.NewHub()}
+	s := &Server{cfg: cfg, services: services, mux: http.NewServeMux(), tokens: map[string]string{}, ly: lyserver.New(cfg.DatabaseURL), socketHub: socketio.NewHub(), states: map[string]bool{}}
 	s.routes()
 	return s
 }

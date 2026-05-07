@@ -250,6 +250,7 @@ RETURNING id, event_id, event_name, title, message, context, source, severity, c
 }
 
 func (s *PostgresStore) AddMessage(m domain.Message) (domain.Message, error) {
+	m = domain.NormalizeMessage(m)
 	if m.MessageID == "" {
 		m.MessageID = newID("msg")
 	}
@@ -286,7 +287,7 @@ FROM messages WHERE event_id=$1 ORDER BY id`, eventID)
 	for rows.Next() {
 		m, err := scanMessage(rows)
 		if err == nil {
-			out = append(out, m)
+			out = append(out, domain.NormalizeMessage(m))
 		}
 	}
 	return out
@@ -682,5 +683,5 @@ func scanExecution(row scanner) (domain.Execution, error) {
 func scanMessage(row scanner) (domain.Message, error) {
 	var m domain.Message
 	err := row.Scan(&m.ID, &m.MessageID, &m.EventID, &m.UserID, &m.UserNickname, &m.MessageFrom, &m.MessageType, &m.MessageCategory, &m.SenderType, &m.ChatSessionID, &m.MessageContent, &m.RoundID, &m.CreatedAt)
-	return m, err
+	return domain.NormalizeMessage(m), err
 }
