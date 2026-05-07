@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type APIResponse struct {
 	Status  string      `json:"status,omitempty"`
@@ -58,6 +61,57 @@ const (
 )
 
 var AgentRoles = []string{RoleCaptain, RoleManager, RoleOperator, RoleExecutor, RoleExpert}
+
+func NormalizeMessageFrom(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "system":
+		return RoleSystem
+	case "user", "engineer", "human":
+		return RoleUser
+	case "assistant", "ai", "ai_assistant", "engineer_ai":
+		return RoleAssistant
+	case "captain", "role_soc_captain", "soc_captain", "_captain":
+		return RoleCaptain
+	case "manager", "role_soc_manager", "soc_manager", "_manager":
+		return RoleManager
+	case "operator", "role_soc_operator", "soc_operator", "_operator":
+		return RoleOperator
+	case "executor", "role_soc_executor", "soc_executor", "_executor", "autopilot", "queue-worker":
+		return RoleExecutor
+	case "expert", "role_soc_expert", "soc_expert", "_expert":
+		return RoleExpert
+	default:
+		return strings.TrimSpace(v)
+	}
+}
+
+func SenderType(messageFrom string) string {
+	switch NormalizeMessageFrom(messageFrom) {
+	case RoleUser:
+		return "user"
+	case RoleAssistant:
+		return "ai"
+	case RoleSystem:
+		return "system"
+	default:
+		return "agent"
+	}
+}
+
+func NormalizeMessage(m Message) Message {
+	m.MessageFrom = NormalizeMessageFrom(m.MessageFrom)
+	if m.SenderType == "" || m.SenderType == "unknown" {
+		m.SenderType = SenderType(m.MessageFrom)
+	}
+	if m.MessageCategory == "" {
+		if m.SenderType == "user" || m.SenderType == "ai" {
+			m.MessageCategory = "engineer_chat"
+		} else {
+			m.MessageCategory = "agent"
+		}
+	}
+	return m
+}
 
 type Message struct {
 	ID              int64     `json:"id"`
