@@ -42,7 +42,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health", s.health)
 	s.mux.HandleFunc("GET /api/version", s.version)
 
-	s.mux.HandleFunc("POST /internal/event/push", s.internalEventPush)
+	s.mux.HandleFunc("POST /internal/event/push", s.withDrivingModeAutomation(s.internalEventPush))
 	s.mux.HandleFunc("POST /internal/sync:run", s.internalSyncRun)
 	s.mux.HandleFunc("POST /internal/admin/dedup/reset", s.internalDedupReset)
 	s.mux.HandleFunc("GET /internal/flows/{flow_id}", s.internalGetFlow)
@@ -59,7 +59,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/auth/create-user", s.createUser)
 	s.mux.HandleFunc("POST /api/auth/change-password", s.changePassword)
 
-	s.mux.HandleFunc("POST /api/event/create", s.createEvent)
+	s.mux.HandleFunc("POST /api/event/create", s.withDrivingModeAutomation(s.createEvent))
 	s.mux.HandleFunc("GET /api/event/list", s.listEvents)
 	s.mux.HandleFunc("GET /api/event/{event_id}", s.getEvent)
 	s.mux.HandleFunc("GET /api/event/{event_id}/messages", s.getMessages)
@@ -84,8 +84,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/prompt/background/{name}", s.promptBackgroundGet)
 	s.mux.HandleFunc("PUT /api/prompt/background/{name}", s.ok)
 
-	s.mux.HandleFunc("GET /api/state/driving-mode", s.drivingModeGet)
-	s.mux.HandleFunc("PUT /api/state/driving-mode", s.ok)
+	s.mux.HandleFunc("GET /api/state/driving-mode", s.drivingModeGetCompat)
+	s.mux.HandleFunc("PUT /api/state/driving-mode", s.drivingModePut)
 
 	s.mux.HandleFunc("POST /api/engineer-chat/send", s.withNewMessageBroadcast(s.engineerChatSend))
 	s.mux.HandleFunc("GET /api/engineer-chat/history", s.engineerChatHistory)
