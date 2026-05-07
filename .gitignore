@@ -2,3 +2,5 @@
 # generated compatibility reports
 reports/
 .docker-data/
+.env
+.docker-data/**
