@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"traffic-go/internal/realtime"
 
 	"github.com/gorilla/websocket"
 )
@@ -33,13 +34,15 @@ type Session struct {
 }
 
 func NewHub() *Hub {
-	return &Hub{
+	h := &Hub{
 		sessions: map[string]*Session{},
 		rooms:    map[string]map[string]*Session{},
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
+	realtime.Register(h)
+	return h
 }
 
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -66,9 +66,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/event/{event_id}/tasks", s.getTasks)
 	s.mux.HandleFunc("GET /api/event/{event_id}/stats", s.getStats)
 	s.mux.HandleFunc("GET /api/event/{event_id}/summaries", s.getSummaries)
-	s.mux.HandleFunc("POST /api/event/send_message/{event_id}", s.sendEventMessage)
+	s.mux.HandleFunc("POST /api/event/send_message/{event_id}", s.withNewMessageBroadcast(s.sendEventMessage))
 	s.mux.HandleFunc("GET /api/event/{event_id}/executions", s.getExecutions)
-	s.mux.HandleFunc("POST /api/event/{event_id}/execution/{execution_id}/complete", s.completeExecution)
+	s.mux.HandleFunc("POST /api/event/{event_id}/execution/{execution_id}/complete", s.withExecutionUpdateBroadcast(s.completeExecution))
 	s.mux.HandleFunc("GET /api/event/{event_id}/hierarchy", s.getHierarchy)
 
 	s.mux.HandleFunc("GET /api/user/list", s.listUsers)
@@ -87,7 +87,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/state/driving-mode", s.drivingModeGet)
 	s.mux.HandleFunc("PUT /api/state/driving-mode", s.ok)
 
-	s.mux.HandleFunc("POST /api/engineer-chat/send", s.engineerChatSend)
+	s.mux.HandleFunc("POST /api/engineer-chat/send", s.withNewMessageBroadcast(s.engineerChatSend))
 	s.mux.HandleFunc("GET /api/engineer-chat/history", s.engineerChatHistory)
 	s.mux.HandleFunc("POST /api/engineer-chat/new-session", s.engineerNewSession)
 	s.mux.HandleFunc("GET /api/engineer-chat/status", s.engineerStatus)
