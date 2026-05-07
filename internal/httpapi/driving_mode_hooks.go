@@ -79,12 +79,18 @@ func (s *Server) withDrivingModeAutomation(next http.HandlerFunc) http.HandlerFu
 		next(rec, r)
 
 		if code := rec.statusCode(); code >= 200 && code < 300 {
-			eventID, title := drivingEventFromResponse(rec.body.Bytes())
+			eventID, _ := drivingEventFromResponse(rec.body.Bytes())
 			if eventID == "" {
-				eventID, title = drivingEventFromRequest(r)
+				eventID, _ = drivingEventFromRequest(r)
 			}
 			if eventID != "" {
-				if err := autopilot.RunForEvent(r.Context(), s.cfg.DatabaseURL, eventID, title); err != nil {
+				enabled, err := autopilot.GetDrivingMode(r.Context(), s.cfg.DatabaseURL)
+				if err != nil {
+					log.Printf("driving-mode: read state failed event_id=%s err=%v", eventID, err)
+				} else if enabled {
+					err = s.services.RunAgentWorkflow(r.Context(), eventID)
+				}
+				if err != nil {
 					log.Printf("driving-mode: automation failed event_id=%s err=%v", eventID, err)
 				}
 			}

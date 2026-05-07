@@ -23,8 +23,15 @@ type MemoryStore struct {
 	messageSeq      int64
 
 	tasksByEvent     map[string][]domain.Task
+	actionsByEvent   map[string][]domain.Action
+	commandsByEvent  map[string][]domain.Command
 	execByEvent      map[string][]domain.Execution
 	summariesByEvent map[string][]domain.Summary
+	taskSeq          int64
+	actionSeq        int64
+	commandSeq       int64
+	execSeq          int64
+	summarySeq       int64
 	eventMaps        map[string]domain.EventMap
 	cursors          map[string]domain.SyncCursor
 	pushed           map[string]domain.PushedEvent
@@ -39,6 +46,8 @@ func NewMemoryStore() *MemoryStore {
 		events:           map[string]domain.Event{},
 		messagesByEvent:  map[string][]domain.Message{},
 		tasksByEvent:     map[string][]domain.Task{},
+		actionsByEvent:   map[string][]domain.Action{},
+		commandsByEvent:  map[string][]domain.Command{},
 		execByEvent:      map[string][]domain.Execution{},
 		summariesByEvent: map[string][]domain.Summary{},
 		eventMaps:        map[string]domain.EventMap{},
@@ -252,6 +261,9 @@ func (s *MemoryStore) AddMessage(m domain.Message) (domain.Message, error) {
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
 	}
+	if m.RoundID == 0 {
+		m.RoundID = 1
+	}
 	s.messagesByEvent[m.EventID] = append(s.messagesByEvent[m.EventID], m)
 	return m, nil
 }
@@ -270,10 +282,212 @@ func (s *MemoryStore) ListTasks(eventID string) []domain.Task {
 	return append([]domain.Task(nil), s.tasksByEvent[eventID]...)
 }
 
+func (s *MemoryStore) AddTask(t domain.Task) (domain.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.events[t.EventID]; !ok {
+		return domain.Task{}, errors.New("event not found")
+	}
+	now := time.Now().UTC()
+	s.taskSeq++
+	t.ID = s.taskSeq
+	if t.TaskID == "" {
+		t.TaskID = newID("task")
+	}
+	if t.TaskStatus == "" {
+		t.TaskStatus = "pending"
+	}
+	if t.RoundID == 0 {
+		t.RoundID = 1
+	}
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+	s.tasksByEvent[t.EventID] = append(s.tasksByEvent[t.EventID], t)
+	return t, nil
+}
+
+func (s *MemoryStore) UpdateTask(taskID string, patch map[string]any) (domain.Task, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for eventID, rows := range s.tasksByEvent {
+		for i := range rows {
+			if rows[i].TaskID != taskID {
+				continue
+			}
+			if v, ok := stringPatch(patch, "task_status"); ok {
+				rows[i].TaskStatus = v
+			}
+			if v, ok := stringPatch(patch, "assigned_to"); ok {
+				rows[i].AssignedTo = v
+			}
+			rows[i].UpdatedAt = time.Now().UTC()
+			s.tasksByEvent[eventID] = rows
+			return rows[i], true
+		}
+	}
+	return domain.Task{}, false
+}
+
+func (s *MemoryStore) AddAction(a domain.Action) (domain.Action, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.events[a.EventID]; !ok {
+		return domain.Action{}, errors.New("event not found")
+	}
+	now := time.Now().UTC()
+	s.actionSeq++
+	a.ID = s.actionSeq
+	if a.ActionID == "" {
+		a.ActionID = newID("act")
+	}
+	if a.ActionStatus == "" {
+		a.ActionStatus = "pending"
+	}
+	if a.RoundID == 0 {
+		a.RoundID = 1
+	}
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = now
+	}
+	a.UpdatedAt = now
+	s.actionsByEvent[a.EventID] = append(s.actionsByEvent[a.EventID], a)
+	return a, nil
+}
+
+func (s *MemoryStore) UpdateAction(actionID string, patch map[string]any) (domain.Action, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for eventID, rows := range s.actionsByEvent {
+		for i := range rows {
+			if rows[i].ActionID != actionID {
+				continue
+			}
+			if v, ok := stringPatch(patch, "action_status"); ok {
+				rows[i].ActionStatus = v
+			}
+			if v, ok := stringPatch(patch, "action_result"); ok {
+				rows[i].ActionResult = v
+			}
+			rows[i].UpdatedAt = time.Now().UTC()
+			s.actionsByEvent[eventID] = rows
+			return rows[i], true
+		}
+	}
+	return domain.Action{}, false
+}
+
+func (s *MemoryStore) ListActions(eventID string) []domain.Action {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]domain.Action(nil), s.actionsByEvent[eventID]...)
+}
+
+func (s *MemoryStore) AddCommand(c domain.Command) (domain.Command, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.events[c.EventID]; !ok {
+		return domain.Command{}, errors.New("event not found")
+	}
+	now := time.Now().UTC()
+	s.commandSeq++
+	c.ID = s.commandSeq
+	if c.CommandID == "" {
+		c.CommandID = newID("cmd")
+	}
+	if c.CommandStatus == "" {
+		c.CommandStatus = "pending"
+	}
+	if c.RoundID == 0 {
+		c.RoundID = 1
+	}
+	if c.CreatedAt.IsZero() {
+		c.CreatedAt = now
+	}
+	c.UpdatedAt = now
+	s.commandsByEvent[c.EventID] = append(s.commandsByEvent[c.EventID], c)
+	return c, nil
+}
+
+func (s *MemoryStore) UpdateCommand(commandID string, patch map[string]any) (domain.Command, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for eventID, rows := range s.commandsByEvent {
+		for i := range rows {
+			if rows[i].CommandID != commandID {
+				continue
+			}
+			if v, ok := stringPatch(patch, "command_status"); ok {
+				rows[i].CommandStatus = v
+			}
+			if v, ok := stringPatch(patch, "command_result"); ok {
+				rows[i].CommandResult = v
+			}
+			rows[i].UpdatedAt = time.Now().UTC()
+			s.commandsByEvent[eventID] = rows
+			return rows[i], true
+		}
+	}
+	return domain.Command{}, false
+}
+
+func (s *MemoryStore) ListCommands(eventID string) []domain.Command {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]domain.Command(nil), s.commandsByEvent[eventID]...)
+}
+
+func (s *MemoryStore) AddExecution(e domain.Execution) (domain.Execution, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.events[e.EventID]; !ok {
+		return domain.Execution{}, errors.New("event not found")
+	}
+	now := time.Now().UTC()
+	s.execSeq++
+	e.ID = s.execSeq
+	if e.ExecutionID == "" {
+		e.ExecutionID = newID("exec")
+	}
+	if e.ExecutionStatus == "" {
+		e.ExecutionStatus = "pending"
+	}
+	if e.RoundID == 0 {
+		e.RoundID = 1
+	}
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = now
+	}
+	e.UpdatedAt = now
+	s.execByEvent[e.EventID] = append(s.execByEvent[e.EventID], e)
+	return e, nil
+}
+
 func (s *MemoryStore) ListExecutions(eventID string) []domain.Execution {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]domain.Execution(nil), s.execByEvent[eventID]...)
+}
+
+func (s *MemoryStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.events[sm.EventID]; !ok {
+		return domain.Summary{}, errors.New("event not found")
+	}
+	now := time.Now().UTC()
+	s.summarySeq++
+	sm.ID = s.summarySeq
+	if sm.RoundID == 0 {
+		sm.RoundID = 1
+	}
+	if sm.CreatedAt.IsZero() {
+		sm.CreatedAt = now
+	}
+	sm.UpdatedAt = now
+	s.summariesByEvent[sm.EventID] = append(s.summariesByEvent[sm.EventID], sm)
+	return sm, nil
 }
 
 func (s *MemoryStore) ListSummaries(eventID string) []domain.Summary {

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -59,14 +58,14 @@ func (s Services) ProcessLyEvent(ctx context.Context, ly map[string]any) (map[st
 		return nil, err
 	}
 	s.Store.BindEventMap(fp, lyID, event.EventID)
-	systemMsg := map[string]any{"response_text": "系统创建了安全事件: " + firstNonEmpty(event.EventName, "未命名事件")}
-	b, _ := json.Marshal(systemMsg)
 	_, _ = s.Store.AddMessage(domain.Message{
-		EventID:        event.EventID,
-		MessageFrom:    "system",
-		MessageType:    "system_notification",
-		MessageContent: string(b),
-		RoundID:        1,
+		EventID:         event.EventID,
+		MessageFrom:     domain.RoleSystem,
+		MessageType:     "system_notification",
+		MessageContent:  StandardContent(responseText("系统创建了安全事件: "+firstNonEmpty(event.EventName, "未命名事件"), nil)),
+		RoundID:         1,
+		MessageCategory: "agent",
+		SenderType:      "system",
 	})
 	_ = s.publish(ctx, "event.ingested", event.EventID, "flowshadow", map[string]any{
 		"fingerprint": fp,
@@ -159,14 +158,14 @@ func (s Services) CreateEventFromRequest(body map[string]any) (domain.Event, err
 	if err != nil {
 		return domain.Event{}, err
 	}
-	systemMsg := map[string]any{"response_text": "系统创建了安全事件: " + firstNonEmpty(created.EventName, "未命名事件")}
-	b, _ := json.Marshal(systemMsg)
 	_, _ = s.Store.AddMessage(domain.Message{
-		EventID:        created.EventID,
-		MessageFrom:    "system",
-		MessageType:    "system_notification",
-		MessageContent: string(b),
-		RoundID:        1,
+		EventID:         created.EventID,
+		MessageFrom:     domain.RoleSystem,
+		MessageType:     "system_notification",
+		MessageContent:  StandardContent(responseText("系统创建了安全事件: "+firstNonEmpty(created.EventName, "未命名事件"), nil)),
+		RoundID:         1,
+		MessageCategory: "agent",
+		SenderType:      "system",
 	})
 	_ = s.publish(context.Background(), "event.created", created.EventID, firstNonEmpty(created.Source, "manual"), created)
 	return created, nil

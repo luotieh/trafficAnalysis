@@ -46,17 +46,33 @@ type IOC struct {
 	Role  string `json:"role,omitempty"`
 }
 
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleCaptain   = "_captain"
+	RoleManager   = "_manager"
+	RoleOperator  = "_operator"
+	RoleExecutor  = "_executor"
+	RoleExpert    = "_expert"
+)
+
+var AgentRoles = []string{RoleCaptain, RoleManager, RoleOperator, RoleExecutor, RoleExpert}
+
 type Message struct {
-	ID             int64     `json:"id"`
-	MessageID      string    `json:"message_id"`
-	EventID        string    `json:"event_id"`
-	UserID         string    `json:"user_id,omitempty"`
-	UserNickname   string    `json:"user_nickname,omitempty"`
-	MessageFrom    string    `json:"message_from"`
-	MessageType    string    `json:"message_type"`
-	MessageContent string    `json:"message_content"`
-	RoundID        int       `json:"round_id"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID              int64     `json:"id"`
+	MessageID       string    `json:"message_id"`
+	EventID         string    `json:"event_id"`
+	UserID          string    `json:"user_id,omitempty"`
+	UserNickname    string    `json:"user_nickname,omitempty"`
+	MessageFrom     string    `json:"message_from"`
+	MessageType     string    `json:"message_type"`
+	MessageContent  string    `json:"message_content"`
+	RoundID         int       `json:"round_id"`
+	MessageCategory string    `json:"message_category,omitempty"`
+	SenderType      string    `json:"sender_type,omitempty"`
+	ChatSessionID   string    `json:"chat_session_id,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type Task struct {
@@ -64,28 +80,68 @@ type Task struct {
 	TaskID          string    `json:"task_id"`
 	EventID         string    `json:"event_id"`
 	TaskName        string    `json:"task_name"`
+	TaskType        string    `json:"task_type,omitempty"`
 	TaskDescription string    `json:"task_description,omitempty"`
 	TaskStatus      string    `json:"task_status"`
 	TaskPriority    string    `json:"task_priority,omitempty"`
 	AssignedTo      string    `json:"assigned_to,omitempty"`
+	TaskAssignee    string    `json:"task_assignee,omitempty"`
 	RoundID         int       `json:"round_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-type Execution struct {
+type Action struct {
+	ID             int64     `json:"id"`
+	ActionID       string    `json:"action_id"`
+	TaskID         string    `json:"task_id"`
+	EventID        string    `json:"event_id"`
+	RoundID        int       `json:"round_id"`
+	ActionName     string    `json:"action_name"`
+	ActionType     string    `json:"action_type,omitempty"`
+	ActionAssignee string    `json:"action_assignee,omitempty"`
+	ActionStatus   string    `json:"action_status"`
+	ActionResult   string    `json:"action_result,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type Command struct {
 	ID              int64     `json:"id"`
-	ExecutionID     string    `json:"execution_id"`
+	CommandID       string    `json:"command_id"`
+	ActionID        string    `json:"action_id"`
+	TaskID          string    `json:"task_id"`
 	EventID         string    `json:"event_id"`
-	CommandID       string    `json:"command_id,omitempty"`
-	ExecutionStatus string    `json:"execution_status"`
-	ExecutionResult string    `json:"execution_result,omitempty"`
-	CommandName     string    `json:"command_name,omitempty"`
+	RoundID         int       `json:"round_id"`
+	CommandName     string    `json:"command_name"`
 	CommandType     string    `json:"command_type,omitempty"`
+	CommandAssignee string    `json:"command_assignee,omitempty"`
 	CommandEntity   string    `json:"command_entity,omitempty"`
 	CommandParams   string    `json:"command_params,omitempty"`
+	CommandStatus   string    `json:"command_status"`
+	CommandResult   string    `json:"command_result,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type Execution struct {
+	ID               int64     `json:"id"`
+	ExecutionID      string    `json:"execution_id"`
+	EventID          string    `json:"event_id"`
+	TaskID           string    `json:"task_id,omitempty"`
+	ActionID         string    `json:"action_id,omitempty"`
+	RoundID          int       `json:"round_id,omitempty"`
+	CommandID        string    `json:"command_id,omitempty"`
+	ExecutionStatus  string    `json:"execution_status"`
+	ExecutionResult  string    `json:"execution_result,omitempty"`
+	ExecutionSummary string    `json:"execution_summary,omitempty"`
+	AISummary        string    `json:"ai_summary,omitempty"`
+	CommandName      string    `json:"command_name,omitempty"`
+	CommandType      string    `json:"command_type,omitempty"`
+	CommandEntity    string    `json:"command_entity,omitempty"`
+	CommandParams    string    `json:"command_params,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type Summary struct {

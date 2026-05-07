@@ -256,20 +256,26 @@ func (s *PostgresStore) AddMessage(m domain.Message) (domain.Message, error) {
 	if m.RoundID == 0 {
 		m.RoundID = 1
 	}
+	if m.MessageCategory == "" {
+		m.MessageCategory = "agent"
+	}
+	if m.SenderType == "" {
+		m.SenderType = "agent"
+	}
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
 	}
 	row := s.db.QueryRowContext(context.Background(), `
-INSERT INTO messages (message_id, event_id, user_id, user_nickname, message_from, message_type, message_content, round_id, created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-RETURNING id, message_id, event_id, user_id, user_nickname, message_from, message_type, message_content, round_id, created_at`,
-		m.MessageID, m.EventID, m.UserID, m.UserNickname, m.MessageFrom, m.MessageType, m.MessageContent, m.RoundID, m.CreatedAt)
+INSERT INTO messages (message_id, event_id, user_id, user_nickname, message_from, message_type, message_category, sender_type, chat_session_id, message_content, round_id, created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+RETURNING id, message_id, event_id, user_id, user_nickname, message_from, message_type, message_category, sender_type, chat_session_id, message_content, round_id, created_at`,
+		m.MessageID, m.EventID, m.UserID, m.UserNickname, m.MessageFrom, m.MessageType, m.MessageCategory, m.SenderType, m.ChatSessionID, m.MessageContent, m.RoundID, m.CreatedAt)
 	return scanMessage(row)
 }
 
 func (s *PostgresStore) ListMessages(eventID string) []domain.Message {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, message_id, event_id, user_id, user_nickname, message_from, message_type, message_content, round_id, created_at
+SELECT id, message_id, event_id, user_id, user_nickname, message_from, message_type, message_category, sender_type, chat_session_id, message_content, round_id, created_at
 FROM messages WHERE event_id=$1 ORDER BY id`, eventID)
 	if err != nil {
 		return nil
@@ -286,9 +292,54 @@ FROM messages WHERE event_id=$1 ORDER BY id`, eventID)
 	return out
 }
 
+func (s *PostgresStore) AddTask(t domain.Task) (domain.Task, error) {
+	if t.TaskID == "" {
+		t.TaskID = newID("task")
+	}
+	if t.TaskStatus == "" {
+		t.TaskStatus = "pending"
+	}
+	if t.RoundID == 0 {
+		t.RoundID = 1
+	}
+	if t.TaskAssignee == "" {
+		t.TaskAssignee = t.AssignedTo
+	}
+	if t.AssignedTo == "" {
+		t.AssignedTo = t.TaskAssignee
+	}
+	now := time.Now().UTC()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+	row := s.db.QueryRowContext(context.Background(), `
+INSERT INTO tasks (task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+RETURNING id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at`,
+		t.TaskID, t.EventID, t.TaskName, t.TaskType, t.TaskDescription, t.TaskStatus, t.TaskPriority, t.AssignedTo, t.TaskAssignee, t.RoundID, t.CreatedAt, t.UpdatedAt)
+	return scanTask(row)
+}
+
+func (s *PostgresStore) UpdateTask(taskID string, patch map[string]any) (domain.Task, bool) {
+	status, _ := stringPatch(patch, "task_status")
+	assigned, _ := stringPatch(patch, "assigned_to")
+	row := s.db.QueryRowContext(context.Background(), `
+UPDATE tasks SET
+task_status=COALESCE(NULLIF($2,''), task_status),
+assigned_to=COALESCE(NULLIF($3,''), assigned_to),
+task_assignee=COALESCE(NULLIF($3,''), task_assignee),
+updated_at=now()
+WHERE task_id=$1
+RETURNING id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at`,
+		taskID, status, assigned)
+	t, err := scanTask(row)
+	return t, err == nil
+}
+
 func (s *PostgresStore) ListTasks(eventID string) []domain.Task {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, task_id, event_id, task_name, task_description, task_status, task_priority, assigned_to, round_id, created_at, updated_at
+SELECT id, task_id, event_id, task_name, task_type, task_description, task_status, task_priority, assigned_to, task_assignee, round_id, created_at, updated_at
 FROM tasks WHERE event_id=$1 ORDER BY id`, eventID)
 	if err != nil {
 		return nil
@@ -297,17 +348,152 @@ FROM tasks WHERE event_id=$1 ORDER BY id`, eventID)
 
 	out := []domain.Task{}
 	for rows.Next() {
-		var t domain.Task
-		if err := rows.Scan(&t.ID, &t.TaskID, &t.EventID, &t.TaskName, &t.TaskDescription, &t.TaskStatus, &t.TaskPriority, &t.AssignedTo, &t.RoundID, &t.CreatedAt, &t.UpdatedAt); err == nil {
+		t, err := scanTask(rows)
+		if err == nil {
 			out = append(out, t)
 		}
 	}
 	return out
 }
 
+func (s *PostgresStore) AddAction(a domain.Action) (domain.Action, error) {
+	if a.ActionID == "" {
+		a.ActionID = newID("act")
+	}
+	if a.ActionStatus == "" {
+		a.ActionStatus = "pending"
+	}
+	if a.RoundID == 0 {
+		a.RoundID = 1
+	}
+	now := time.Now().UTC()
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = now
+	}
+	a.UpdatedAt = now
+	row := s.db.QueryRowContext(context.Background(), `
+INSERT INTO actions (action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+RETURNING id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at`,
+		a.ActionID, a.TaskID, a.EventID, a.RoundID, a.ActionName, a.ActionType, a.ActionAssignee, a.ActionStatus, a.ActionResult, a.CreatedAt, a.UpdatedAt)
+	return scanAction(row)
+}
+
+func (s *PostgresStore) UpdateAction(actionID string, patch map[string]any) (domain.Action, bool) {
+	status, _ := stringPatch(patch, "action_status")
+	result, _ := stringPatch(patch, "action_result")
+	row := s.db.QueryRowContext(context.Background(), `
+UPDATE actions SET
+action_status=COALESCE(NULLIF($2,''), action_status),
+action_result=COALESCE(NULLIF($3,''), action_result),
+updated_at=now()
+WHERE action_id=$1
+RETURNING id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at`,
+		actionID, status, result)
+	a, err := scanAction(row)
+	return a, err == nil
+}
+
+func (s *PostgresStore) ListActions(eventID string) []domain.Action {
+	rows, err := s.db.QueryContext(context.Background(), `
+SELECT id, action_id, task_id, event_id, round_id, action_name, action_type, action_assignee, action_status, action_result, created_at, updated_at
+FROM actions WHERE event_id=$1 ORDER BY id`, eventID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []domain.Action{}
+	for rows.Next() {
+		a, err := scanAction(rows)
+		if err == nil {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func (s *PostgresStore) AddCommand(c domain.Command) (domain.Command, error) {
+	if c.CommandID == "" {
+		c.CommandID = newID("cmd")
+	}
+	if c.CommandStatus == "" {
+		c.CommandStatus = "pending"
+	}
+	if c.RoundID == 0 {
+		c.RoundID = 1
+	}
+	now := time.Now().UTC()
+	if c.CreatedAt.IsZero() {
+		c.CreatedAt = now
+	}
+	c.UpdatedAt = now
+	row := s.db.QueryRowContext(context.Background(), `
+INSERT INTO commands (command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+RETURNING id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at`,
+		c.CommandID, c.ActionID, c.TaskID, c.EventID, c.RoundID, c.CommandName, c.CommandType, c.CommandAssignee, c.CommandEntity, c.CommandParams, c.CommandStatus, c.CommandResult, c.CreatedAt, c.UpdatedAt)
+	return scanCommand(row)
+}
+
+func (s *PostgresStore) UpdateCommand(commandID string, patch map[string]any) (domain.Command, bool) {
+	status, _ := stringPatch(patch, "command_status")
+	result, _ := stringPatch(patch, "command_result")
+	row := s.db.QueryRowContext(context.Background(), `
+UPDATE commands SET
+command_status=COALESCE(NULLIF($2,''), command_status),
+command_result=COALESCE(NULLIF($3,''), command_result),
+updated_at=now()
+WHERE command_id=$1
+RETURNING id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at`,
+		commandID, status, result)
+	c, err := scanCommand(row)
+	return c, err == nil
+}
+
+func (s *PostgresStore) ListCommands(eventID string) []domain.Command {
+	rows, err := s.db.QueryContext(context.Background(), `
+SELECT id, command_id, action_id, task_id, event_id, round_id, command_name, command_type, command_assignee, command_entity, command_params, command_status, command_result, created_at, updated_at
+FROM commands WHERE event_id=$1 ORDER BY id`, eventID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []domain.Command{}
+	for rows.Next() {
+		c, err := scanCommand(rows)
+		if err == nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (s *PostgresStore) AddExecution(e domain.Execution) (domain.Execution, error) {
+	if e.ExecutionID == "" {
+		e.ExecutionID = newID("exec")
+	}
+	if e.ExecutionStatus == "" {
+		e.ExecutionStatus = "pending"
+	}
+	if e.RoundID == 0 {
+		e.RoundID = 1
+	}
+	now := time.Now().UTC()
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = now
+	}
+	e.UpdatedAt = now
+	row := s.db.QueryRowContext(context.Background(), `
+INSERT INTO executions (execution_id, event_id, task_id, action_id, round_id, command_id, execution_status, execution_result, execution_summary, ai_summary, command_name, command_type, command_entity, command_params, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+RETURNING id, execution_id, event_id, task_id, action_id, round_id, command_id, execution_status, execution_result, execution_summary, ai_summary, command_name, command_type, command_entity, command_params, created_at, updated_at`,
+		e.ExecutionID, e.EventID, e.TaskID, e.ActionID, e.RoundID, e.CommandID, e.ExecutionStatus, e.ExecutionResult, e.ExecutionSummary, e.AISummary, e.CommandName, e.CommandType, e.CommandEntity, e.CommandParams, e.CreatedAt, e.UpdatedAt)
+	return scanExecution(row)
+}
+
 func (s *PostgresStore) ListExecutions(eventID string) []domain.Execution {
 	rows, err := s.db.QueryContext(context.Background(), `
-SELECT id, execution_id, event_id, command_id, execution_status, execution_result, command_name, command_type, command_entity, command_params, created_at, updated_at
+SELECT id, execution_id, event_id, task_id, action_id, round_id, command_id, execution_status, execution_result, execution_summary, ai_summary, command_name, command_type, command_entity, command_params, created_at, updated_at
 FROM executions WHERE event_id=$1 ORDER BY id`, eventID)
 	if err != nil {
 		return nil
@@ -316,12 +502,31 @@ FROM executions WHERE event_id=$1 ORDER BY id`, eventID)
 
 	out := []domain.Execution{}
 	for rows.Next() {
-		var e domain.Execution
-		if err := rows.Scan(&e.ID, &e.ExecutionID, &e.EventID, &e.CommandID, &e.ExecutionStatus, &e.ExecutionResult, &e.CommandName, &e.CommandType, &e.CommandEntity, &e.CommandParams, &e.CreatedAt, &e.UpdatedAt); err == nil {
+		e, err := scanExecution(rows)
+		if err == nil {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+func (s *PostgresStore) AddSummary(sm domain.Summary) (domain.Summary, error) {
+	if sm.RoundID == 0 {
+		sm.RoundID = 1
+	}
+	now := time.Now().UTC()
+	if sm.CreatedAt.IsZero() {
+		sm.CreatedAt = now
+	}
+	sm.UpdatedAt = now
+	row := s.db.QueryRowContext(context.Background(), `
+INSERT INTO summaries (event_id, round_id, event_summary, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5)
+RETURNING id, event_id, round_id, event_summary, created_at, updated_at`,
+		sm.EventID, sm.RoundID, sm.EventSummary, sm.CreatedAt, sm.UpdatedAt)
+	var out domain.Summary
+	err := row.Scan(&out.ID, &out.EventID, &out.RoundID, &out.EventSummary, &out.CreatedAt, &out.UpdatedAt)
+	return out, err
 }
 
 func (s *PostgresStore) ListSummaries(eventID string) []domain.Summary {
@@ -450,8 +655,32 @@ func scanEvent(row scanner) (domain.Event, error) {
 	return e, err
 }
 
+func scanTask(row scanner) (domain.Task, error) {
+	var t domain.Task
+	err := row.Scan(&t.ID, &t.TaskID, &t.EventID, &t.TaskName, &t.TaskType, &t.TaskDescription, &t.TaskStatus, &t.TaskPriority, &t.AssignedTo, &t.TaskAssignee, &t.RoundID, &t.CreatedAt, &t.UpdatedAt)
+	return t, err
+}
+
+func scanAction(row scanner) (domain.Action, error) {
+	var a domain.Action
+	err := row.Scan(&a.ID, &a.ActionID, &a.TaskID, &a.EventID, &a.RoundID, &a.ActionName, &a.ActionType, &a.ActionAssignee, &a.ActionStatus, &a.ActionResult, &a.CreatedAt, &a.UpdatedAt)
+	return a, err
+}
+
+func scanCommand(row scanner) (domain.Command, error) {
+	var c domain.Command
+	err := row.Scan(&c.ID, &c.CommandID, &c.ActionID, &c.TaskID, &c.EventID, &c.RoundID, &c.CommandName, &c.CommandType, &c.CommandAssignee, &c.CommandEntity, &c.CommandParams, &c.CommandStatus, &c.CommandResult, &c.CreatedAt, &c.UpdatedAt)
+	return c, err
+}
+
+func scanExecution(row scanner) (domain.Execution, error) {
+	var e domain.Execution
+	err := row.Scan(&e.ID, &e.ExecutionID, &e.EventID, &e.TaskID, &e.ActionID, &e.RoundID, &e.CommandID, &e.ExecutionStatus, &e.ExecutionResult, &e.ExecutionSummary, &e.AISummary, &e.CommandName, &e.CommandType, &e.CommandEntity, &e.CommandParams, &e.CreatedAt, &e.UpdatedAt)
+	return e, err
+}
+
 func scanMessage(row scanner) (domain.Message, error) {
 	var m domain.Message
-	err := row.Scan(&m.ID, &m.MessageID, &m.EventID, &m.UserID, &m.UserNickname, &m.MessageFrom, &m.MessageType, &m.MessageContent, &m.RoundID, &m.CreatedAt)
+	err := row.Scan(&m.ID, &m.MessageID, &m.EventID, &m.UserID, &m.UserNickname, &m.MessageFrom, &m.MessageType, &m.MessageCategory, &m.SenderType, &m.ChatSessionID, &m.MessageContent, &m.RoundID, &m.CreatedAt)
 	return m, err
 }
