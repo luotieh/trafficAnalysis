@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -43,7 +44,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/socket.io", s.socketHub.ServeHTTP)
 	s.mux.HandleFunc("GET /healthz", s.health)
 	s.mux.HandleFunc("GET /health", s.health)
+	s.mux.HandleFunc("GET /health/llm", s.llmHealth)
 	s.mux.HandleFunc("GET /api/version", s.version)
+	s.mux.HandleFunc("GET /api/llm/health", s.llmHealth)
 
 	s.mux.HandleFunc("POST /internal/event/push", s.withDrivingModeAutomation(s.internalEventPush))
 	s.mux.HandleFunc("POST /internal/sync:run", s.internalSyncRun)
@@ -118,6 +121,17 @@ func (s *Server) routes() {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": "ok", "service": "traffic-go", "store_backend": s.cfg.StoreBackend, "mq_backend": s.cfg.MQBackend})
+}
+
+func (s *Server) llmHealth(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.HTTPTimeout)
+	defer cancel()
+	result := s.services.LLM.HealthCheck(ctx)
+	status := http.StatusOK
+	if !result.Configured || !result.OK {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, domain.APIResponse{Status: statusText(result.OK), Data: result})
 }
 
 func (s *Server) version(w http.ResponseWriter, r *http.Request) {
@@ -628,6 +642,13 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, domain.APIResponse{Status: "error", Message: message})
+}
+
+func statusText(ok bool) string {
+	if ok {
+		return "success"
+	}
+	return "error"
 }
 
 func withCORS(next http.Handler) http.Handler {
