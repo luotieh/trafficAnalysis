@@ -14,6 +14,7 @@ import (
 
 	"traffic-go/internal/config"
 	"traffic-go/internal/mq"
+	"traffic-go/internal/service"
 	"traffic-go/internal/store"
 )
 
@@ -118,15 +119,7 @@ DROP TABLE IF EXISTS settings CASCADE;
 }
 
 func SeedBase(ctx context.Context, db *sql.DB) error {
-	prompts := map[string]string{
-		"role_soc_captain":    "你是SOC团队总指挥，负责识别威胁、控制风险、安排团队任务并判断事件是否处置完成。",
-		"role_soc_manager":    "你是SOC安全管理员，负责把指挥官的任务拆解为可执行动作，并协调分析员、处置员和工程师完成。",
-		"role_soc_operator":   "你是一线安全工程师，负责执行查询、处置、通知等具体操作，并按事实返回执行结果。",
-		"role_soc_executor":   "你是自动化执行器，负责调用剧本、工具或外部系统完成被授权的动作。",
-		"role_soc_expert":     "你是SOC安全专家，负责从独立视角总结事件处置过程、识别遗漏并给出专业建议。",
-		"background_security": "默认安全背景：本系统用于流量告警、事件分析、证据查询、响应编排和安全运营复盘。",
-	}
-	for role, content := range prompts {
+	for role, content := range service.DefaultPrompts {
 		if _, err := db.ExecContext(ctx, `
 INSERT INTO prompts (role, content, updated_at)
 VALUES ($1, $2, now())

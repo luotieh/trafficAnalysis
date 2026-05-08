@@ -511,22 +511,17 @@ func (s *Server) updateUserPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) promptList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]string{
-		domain.RoleCaptain:  "负责统筹安全事件处置",
-		domain.RoleManager:  "负责拆解任务与分派",
-		domain.RoleOperator: "负责生成可执行命令",
-		domain.RoleExecutor: "负责连接外部工具并执行命令",
-		domain.RoleExpert:   "负责分析证据与给出判断",
-	}})
+	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: service.DefaultPrompts})
 }
 
 func (s *Server) promptGet(w http.ResponseWriter, r *http.Request) {
 	role := r.PathValue("role")
-	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]string{"role": role, "prompt": "请根据事件上下文进行 SOC 分析。"}})
+	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]string{"role": role, "prompt": service.DefaultPrompt(role)}})
 }
 
 func (s *Server) promptBackgroundGet(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]string{"name": r.PathValue("name"), "content": ""}})
+	name := r.PathValue("name")
+	writeJSON(w, http.StatusOK, domain.APIResponse{Status: "success", Data: map[string]string{"name": name, "content": service.DefaultPrompt("background_" + name)}})
 }
 
 func (s *Server) drivingModeGet(w http.ResponseWriter, r *http.Request) {
