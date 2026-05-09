@@ -78,19 +78,29 @@ func (s *Server) drivingModePut(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) withDrivingModeAutomation(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		requestBody, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(requestBody))
+
 		rec := &drivingModeResponseRecorder{ResponseWriter: w}
 		next(rec, r)
 
 		if code := rec.statusCode(); code >= 200 && code < 300 {
 			eventID, _ := drivingEventFromResponse(rec.body.Bytes())
 			if eventID == "" {
-				eventID, _ = drivingEventFromRequest(r)
+				eventID, _ = drivingEventFromBytes(requestBody)
 			}
 			if eventID != "" {
+				forceAutomation := shouldAutoDriveCreatedEvent(r, requestBody)
 				enabled, err := s.getDrivingMode(r)
 				if err != nil {
 					log.Printf("driving-mode: read state failed event_id=%s err=%v", eventID, err)
-				} else if enabled {
+				} else if enabled || forceAutomation {
+					if forceAutomation && !enabled {
+						if err := s.setDrivingMode(r, true); err != nil {
+							log.Printf("driving-mode: enable default automation failed event_id=%s err=%v", eventID, err)
+						}
+					}
 					err = s.services.RunAgentWorkflow(r.Context(), eventID)
 				}
 				if err != nil {
@@ -171,6 +181,52 @@ func drivingEventFromRequest(r *http.Request) (string, string) {
 		return "", ""
 	}
 	return drivingEventFromMap(req)
+}
+
+func drivingEventFromBytes(body []byte) (string, string) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return "", ""
+	}
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		return "", ""
+	}
+	return drivingEventFromMap(req)
+}
+
+func shouldAutoDriveCreatedEvent(r *http.Request, body []byte) bool {
+	if r == nil {
+		return false
+	}
+	var req map[string]any
+	if len(bytes.TrimSpace(body)) > 0 {
+		_ = json.Unmarshal(body, &req)
+	}
+	if v, ok := boolRequestValue(req, "auto_driving", "autoDriving", "driving_mode", "drivingMode", "autopilot", "ai_analysis", "aiAnalysis"); ok {
+		return v
+	}
+	return r.URL != nil && r.URL.Path == "/api/event/create"
+}
+
+func boolRequestValue(m map[string]any, keys ...string) (bool, bool) {
+	for _, key := range keys {
+		v, ok := m[key]
+		if !ok {
+			continue
+		}
+		switch x := v.(type) {
+		case bool:
+			return x, true
+		case string:
+			switch strings.ToLower(strings.TrimSpace(x)) {
+			case "1", "true", "yes", "y", "on":
+				return true, true
+			case "0", "false", "no", "n", "off":
+				return false, true
+			}
+		}
+	}
+	return false, false
 }
 
 func drivingEventFromMap(m map[string]any) (string, string) {
