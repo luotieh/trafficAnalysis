@@ -113,6 +113,11 @@ func NormalizeMessage(m Message) Message {
 	return m
 }
 
+func IsInternalMessage(m Message) bool {
+	t := strings.ToLower(strings.TrimSpace(m.MessageType))
+	return t == "llm_request" || strings.HasSuffix(t, "_llm_request")
+}
+
 type Message struct {
 	ID              int64     `json:"id"`
 	MessageID       string    `json:"message_id"`

@@ -286,7 +286,7 @@ FROM messages WHERE event_id=$1 ORDER BY id`, eventID)
 	out := []domain.Message{}
 	for rows.Next() {
 		m, err := scanMessage(rows)
-		if err == nil {
+		if err == nil && !domain.IsInternalMessage(m) {
 			out = append(out, domain.NormalizeMessage(m))
 		}
 	}

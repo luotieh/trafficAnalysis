@@ -24,9 +24,6 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 	}
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "processing"})
 
-	_ = s.addAgentMessage(eventID, domain.RoleCaptain, "captain_llm_request", roundID,
-		llmRequest(domain.RoleCaptain, buildCaptainRequest(event, roundID)))
-
 	taskPlans := buildTaskPlans(event)
 	createdTasks := make([]domain.Task, 0, len(taskPlans))
 	for _, plan := range taskPlans {
@@ -49,8 +46,6 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 	_ = s.addAgentMessage(eventID, domain.RoleCaptain, "task_created", roundID,
 		captainResponse(event, roundID, createdTasks))
 
-	_ = s.addAgentMessage(eventID, domain.RoleManager, "manager_llm_request", roundID,
-		llmRequest(domain.RoleManager, map[string]any{"type": "generate_actions_by_tasks", "event_id": eventID, "round_id": roundID, "tasks": createdTasks}))
 	createdActions := make([]domain.Action, 0, len(createdTasks))
 	for _, task := range createdTasks {
 		action, err := s.Store.AddAction(domain.Action{
@@ -71,8 +66,6 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 	_ = s.addAgentMessage(eventID, domain.RoleManager, "action_created", roundID,
 		managerResponse(eventID, roundID, createdActions))
 
-	_ = s.addAgentMessage(eventID, domain.RoleOperator, "operator_llm_request", roundID,
-		llmRequest(domain.RoleOperator, map[string]any{"type": "generate_commands_by_actions", "event_id": eventID, "round_id": roundID, "actions": createdActions}))
 	createdCommands := make([]domain.Command, 0, len(createdActions))
 	for _, action := range createdActions {
 		spec := commandSpecForAction(event, action)
@@ -174,33 +167,6 @@ type commandSpec struct {
 	Type   string
 	Entity map[string]any
 	Params map[string]any
-}
-
-func llmRequest(role string, request map[string]any) map[string]any {
-	return map[string]any{
-		"type":          "llm_request",
-		"from":          role,
-		"system_prompt": DefaultPrompt(role),
-		"background": map[string]any{
-			"security":  BackgroundSecurityPrompt,
-			"playbooks": BackgroundSOARPlaybooksPrompt,
-		},
-		"request": request,
-	}
-}
-
-func buildCaptainRequest(event domain.Event, roundID int) map[string]any {
-	return map[string]any{
-		"type":        "generate_tasks_by_event",
-		"event_id":    event.EventID,
-		"round_id":    roundID,
-		"event_name":  firstNonEmpty(event.EventName, event.Title, "请大模型根据message和context生成"),
-		"message":     event.Message,
-		"context":     firstNonEmpty(event.Context, "无"),
-		"source":      firstNonEmpty(event.Source, "无"),
-		"severity":    firstNonEmpty(event.Severity, "medium"),
-		"observables": event.Observables,
-	}
 }
 
 func buildTaskPlans(event domain.Event) []taskPlan {

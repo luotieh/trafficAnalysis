@@ -274,10 +274,14 @@ func (s *MemoryStore) ListMessages(eventID string) []domain.Message {
 	defer s.mu.RUnlock()
 	out := append([]domain.Message(nil), s.messagesByEvent[eventID]...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	for i := range out {
-		out[i] = domain.NormalizeMessage(out[i])
+	filtered := out[:0]
+	for _, m := range out {
+		m = domain.NormalizeMessage(m)
+		if !domain.IsInternalMessage(m) {
+			filtered = append(filtered, m)
+		}
 	}
-	return out
+	return filtered
 }
 
 func (s *MemoryStore) ListTasks(eventID string) []domain.Task {

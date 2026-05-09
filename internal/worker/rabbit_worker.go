@@ -102,11 +102,8 @@ func handleEventMessage(st store.Store, routingKey string, body []byte) error {
 		realtime.BroadcastMessage(msg.EventID, msg.Payload)
 		return nil
 	}
-	svc := service.Services{Store: st}
 	if strings.HasPrefix(routingKey, "event.") {
-		if err := svc.RunAgentWorkflow(context.Background(), msg.EventID); err == nil {
-			return nil
-		}
+		return nil
 	}
 	from := service.NormalizeMessageFrom(msg.Source)
 	content := map[string]any{
