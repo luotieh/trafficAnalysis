@@ -15,12 +15,20 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 	if !ok {
 		return fmt.Errorf("event not found: %s", eventID)
 	}
-	if len(s.Store.ListTasks(eventID)) > 0 || len(s.Store.ListExecutions(eventID)) > 0 {
-		return nil
-	}
 	roundID := event.CurrentRound
 	if roundID == 0 {
 		roundID = 1
+	}
+	existingTasks := s.Store.ListTasks(eventID)
+	existingActions := s.Store.ListActions(eventID)
+	existingCommands := s.Store.ListCommands(eventID)
+	existingExecutions := s.Store.ListExecutions(eventID)
+	existingSummaries := s.Store.ListSummaries(eventID)
+	if len(existingTasks) > 0 || len(existingExecutions) > 0 {
+		if hasAgentWorkflowMessages(s.Store.ListMessages(eventID)) {
+			return nil
+		}
+		return s.restoreAgentWorkflowMessages(event, roundID, existingTasks, existingActions, existingCommands, existingExecutions, existingSummaries)
 	}
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "processing"})
 
@@ -134,6 +142,42 @@ func (s Services) RunAgentWorkflow(ctx context.Context, eventID string) error {
 		expertResponse(event, roundID, sm, executions))
 	_, _ = s.Store.UpdateEvent(eventID, map[string]any{"event_status": "round_finished"})
 	realtime.BroadcastStatus(eventID, map[string]any{"event_id": eventID, "status": "round_finished"})
+	return nil
+}
+
+func hasAgentWorkflowMessages(messages []domain.Message) bool {
+	for _, msg := range messages {
+		switch NormalizeMessageFrom(msg.MessageFrom) {
+		case domain.RoleCaptain, domain.RoleManager, domain.RoleOperator, domain.RoleExecutor, domain.RoleExpert:
+			return true
+		}
+	}
+	return false
+}
+
+func (s Services) restoreAgentWorkflowMessages(event domain.Event, roundID int, tasks []domain.Task, actions []domain.Action, commands []domain.Command, executions []domain.Execution, summaries []domain.Summary) error {
+	eventID := event.EventID
+	if len(tasks) > 0 {
+		_ = s.addAgentMessage(eventID, domain.RoleCaptain, "task_created", roundID, captainResponse(event, roundID, tasks))
+	}
+	if len(actions) > 0 {
+		_ = s.addAgentMessage(eventID, domain.RoleManager, "action_created", roundID, managerResponse(eventID, roundID, actions))
+	}
+	if len(commands) > 0 {
+		_ = s.addAgentMessage(eventID, domain.RoleOperator, "command_created", roundID, operatorResponse(eventID, roundID, commands))
+	}
+	if len(executions) > 0 {
+		_ = s.addAgentMessage(eventID, domain.RoleExecutor, "command_result", roundID, executorResponse(eventID, roundID, executions))
+	}
+	if len(summaries) > 0 {
+		_ = s.addAgentMessage(eventID, domain.RoleExpert, "event_summary", roundID, expertResponse(event, roundID, summaries[len(summaries)-1], executions))
+	} else if len(executions) > 0 {
+		sm, err := s.Store.AddSummary(domain.Summary{EventID: eventID, RoundID: roundID, EventSummary: eventSummary(event, executions)})
+		if err != nil {
+			return err
+		}
+		_ = s.addAgentMessage(eventID, domain.RoleExpert, "event_summary", roundID, expertResponse(event, roundID, sm, executions))
+	}
 	return nil
 }
 

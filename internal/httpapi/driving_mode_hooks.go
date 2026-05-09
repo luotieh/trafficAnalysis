@@ -106,6 +106,8 @@ func (s *Server) withDrivingModeAutomation(next http.HandlerFunc) http.HandlerFu
 				if err != nil {
 					log.Printf("driving-mode: automation failed event_id=%s err=%v", eventID, err)
 				}
+			} else if shouldAutoDriveCreatedEvent(r, requestBody) {
+				log.Printf("driving-mode: automation skipped because event id was not found path=%s", r.URL.Path)
 			}
 		}
 
@@ -205,7 +207,15 @@ func shouldAutoDriveCreatedEvent(r *http.Request, body []byte) bool {
 	if v, ok := boolRequestValue(req, "auto_driving", "autoDriving", "driving_mode", "drivingMode", "autopilot", "ai_analysis", "aiAnalysis"); ok {
 		return v
 	}
-	return r.URL != nil && r.URL.Path == "/api/event/create"
+	if r.URL == nil {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/event/create", "/internal/event/push":
+		return true
+	default:
+		return false
+	}
 }
 
 func boolRequestValue(m map[string]any, keys ...string) (bool, bool) {
@@ -233,7 +243,12 @@ func drivingEventFromMap(m map[string]any) (string, string) {
 	if m == nil {
 		return "", ""
 	}
-	eventID := firstString(m, "event_id", "eventId", "eventID", "id")
+	eventID := firstString(m, "event_id", "eventId", "eventID", "deepsoc_event_id", "deepSOCEventID", "deepSocEventID", "id")
+	if eventID == "" {
+		if upstream, ok := m["upstream"].(map[string]any); ok {
+			eventID, _ = drivingEventFromMap(upstream)
+		}
+	}
 	title := firstString(m, "title", "event_name", "eventName", "message")
 	return eventID, title
 }
