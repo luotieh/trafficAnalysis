@@ -61,8 +61,8 @@ go build -o "$BIN_PATH" ./cmd/traffic-api
 if [ "$START_DEPS" = "true" ] && command -v docker >/dev/null 2>&1; then
   if docker ps >/dev/null 2>&1; then
     echo "== start local dependencies =="
-    if ! docker compose -f deploy/docker-compose.yml up -d --wait postgres rabbitmq; then
-      docker compose -f deploy/docker-compose.yml up -d postgres rabbitmq
+    if ! docker compose -f deploy/docker-compose.yml up -d --pull never --wait postgres rabbitmq; then
+      docker compose -f deploy/docker-compose.yml up -d --pull never postgres rabbitmq
     fi
   fi
 fi
