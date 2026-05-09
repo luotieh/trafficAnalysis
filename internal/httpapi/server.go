@@ -553,12 +553,14 @@ func (s *Server) engineerChatSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "event_id和message不能为空")
 		return
 	}
-	if _, ok := s.services.Store.GetEvent(eventID); !ok {
+	event, ok := s.services.Store.GetEvent(eventID)
+	if !ok {
 		writeError(w, http.StatusNotFound, "事件不存在")
 		return
 	}
 	_, _ = s.services.Store.AddMessage(domain.Message{EventID: eventID, MessageFrom: domain.RoleUser, MessageType: "user_message", MessageContent: message, RoundID: 1, MessageCategory: "engineer_chat", SenderType: "user"})
-	reply, err := s.services.LLM.Chat(r.Context(), message)
+	prompt := s.engineerEventPrompt(event, message)
+	reply, err := s.services.LLM.Chat(r.Context(), prompt)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

@@ -22,6 +22,7 @@ type Config struct {
 	LLMBaseURL              string
 	LLMAPIKey               string
 	LLMModel                string
+	LLMTimeout              time.Duration
 	SyncBatchSize           int
 	SyncLookbackSeconds     int
 	SyncMaxRetries          int
@@ -49,6 +50,7 @@ func Load() Config {
 		LLMBaseURL:              get("LLM_BASE_URL", ""),
 		LLMAPIKey:               get("LLM_API_KEY", ""),
 		LLMModel:                get("LLM_MODEL", "deepseek-chat"),
+		LLMTimeout:              time.Duration(getInt("LLM_TIMEOUT_SECONDS", 60)) * time.Second,
 		SyncBatchSize:           getInt("SYNC_BATCH_SIZE", 200),
 		SyncLookbackSeconds:     getInt("SYNC_LOOKBACK_SECONDS", 600),
 		SyncMaxRetries:          getInt("SYNC_MAX_RETRIES", 5),

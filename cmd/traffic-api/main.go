@@ -18,6 +18,7 @@ import (
 func main() {
 	cfg := config.Load()
 	httpClient := &http.Client{Timeout: cfg.HTTPTimeout}
+	llmHTTPClient := &http.Client{Timeout: cfg.LLMTimeout}
 
 	var st store.Store
 	switch cfg.StoreBackend {
@@ -69,7 +70,7 @@ func main() {
 			BaseURL: cfg.LLMBaseURL,
 			APIKey:  cfg.LLMAPIKey,
 			Model:   cfg.LLMModel,
-			HTTP:    httpClient,
+			HTTP:    llmHTTPClient,
 		},
 		Queue: queue,
 	}
